@@ -32,7 +32,6 @@
   }
   .app{ width:100%; max-width:420px; display:flex; flex-direction:column; gap:16px; }
 
-  /* ---- barra superior: conexión BLE ---- */
   .conn{
     background: var(--panel);
     border: 1px solid var(--line);
@@ -62,7 +61,6 @@
   .btn-connect:active{ transform: scale(.96); }
   .btn-connect.linked{ border-color: var(--signal); color: var(--signal); }
 
-  /* ---- micrófono ---- */
   .mic-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; margin: 6px 0 2px; }
   .mic-btn{
     width: 132px; height:132px; border-radius:50%;
@@ -84,7 +82,6 @@
   .mic-label{ font-family: var(--mono); font-size: 12px; color: var(--muted); text-align:center; min-height:16px; }
   .mic-heard{ color: var(--text); }
 
-  /* ---- consola ---- */
   .console{
     background: #0b100d;
     border: 1px solid var(--line);
@@ -101,7 +98,6 @@
   .console div:last-child{ opacity:1; }
   .console .err{ color: var(--danger); }
 
-  /* ---- cruz direccional ---- */
   .section-title{ font-size: 11px; color: var(--muted); padding: 0 2px; }
   .dpad{
     display:grid;
@@ -182,10 +178,9 @@
   const micLabel    = $('#micLabel');
   const consoleEl   = $('#console');
 
-  // ---- UUIDs del servicio Nordic UART (deben coincidir con el firmware) ----
   const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-  const RX_UUID       = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // el celular escribe aquí
-  const TX_UUID       = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // el robot notifica aquí
+  const RX_UUID       = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+  const TX_UUID       = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
   let bleDevice = null;
   let rxCharacteristic = null;
@@ -206,7 +201,8 @@
     }
     try{
       bleDevice = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [SERVICE_UUID] }]
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID]
       });
 
       connName.textContent = bleDevice.name || 'dispositivo BLE';
@@ -216,7 +212,6 @@
       const service = await server.getPrimaryService(SERVICE_UUID);
       rxCharacteristic = await service.getCharacteristic(RX_UUID);
 
-      // Suscribirse a notificaciones del robot (TX)
       const txCharacteristic = await service.getCharacteristic(TX_UUID);
       await txCharacteristic.startNotifications();
       txCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
@@ -269,7 +264,6 @@
     b.addEventListener('click', () => enviar(b.dataset.cmd));
   });
 
-  // ---- reconocimiento de voz ----
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognizing = false;
   let recognition = null;
