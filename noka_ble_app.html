@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>NOKA MINI · Control BLE</title>
+<style>
+  :root{
+    --bg: #0e1512;
+    --panel: #161f1a;
+    --panel-2: #1d2822;
+    --line: #2a362f;
+    --text: #e6ece8;
+    --muted: #82938a;
+    --signal: #49e08d;
+    --signal-dim: #234838;
+    --amber: #f0a94e;
+    --danger: #e0594f;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{
+    background: radial-gradient(120% 140% at 50% -10%, #14201a 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: var(--sans);
+    -webkit-tap-highlight-color: transparent;
+    display:flex; justify-content:center;
+    min-height:100vh;
+    padding: 18px 14px 28px;
+  }
+  .app{ width:100%; max-width:420px; display:flex; flex-direction:column; gap:16px; }
+
+  /* ---- barra superior: conexión BLE ---- */
+  .conn{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .dot{
+    width:9px; height:9px; border-radius:50%;
+    background: var(--danger);
+    flex-shrink:0;
+  }
+  .dot.on{ background: var(--signal); animation: pulse 1.8s infinite; }
+  @keyframes pulse{
+    0%{ box-shadow: 0 0 0 0 rgba(73,224,141,.45); }
+    70%{ box-shadow: 0 0 0 7px rgba(73,224,141,0); }
+    100%{ box-shadow: 0 0 0 0 rgba(73,224,141,0); }
+  }
+  .conn-field{ flex:1; min-width:0; }
+  .conn-field .name{ font-family: var(--mono); font-size: 14px; }
+  .conn-field .status{ font-size: 11px; color: var(--muted); }
+  .btn-connect{
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 12px; background: var(--panel-2); flex-shrink:0;
+  }
+  .btn-connect:active{ transform: scale(.96); }
+  .btn-connect.linked{ border-color: var(--signal); color: var(--signal); }
+
+  /* ---- micrófono ---- */
+  .mic-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; margin: 6px 0 2px; }
+  .mic-btn{
+    width: 132px; height:132px; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, var(--panel-2), #0f1713 70%);
+    border: 1px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    position:relative;
+    transition: transform .12s ease;
+  }
+  .mic-btn:active{ transform: scale(.95); }
+  .mic-btn.listening{ border-color: var(--signal); animation: ring 1.4s infinite; }
+  @keyframes ring{
+    0%{ box-shadow: 0 0 0 0 rgba(73,224,141,.45); }
+    70%{ box-shadow: 0 0 0 18px rgba(73,224,141,0); }
+    100%{ box-shadow: 0 0 0 0 rgba(73,224,141,0); }
+  }
+  .mic-btn svg{ width:44px; height:44px; }
+  .mic-btn.listening svg path, .mic-btn.listening svg rect{ stroke: var(--signal); }
+  .mic-label{ font-family: var(--mono); font-size: 12px; color: var(--muted); text-align:center; min-height:16px; }
+  .mic-heard{ color: var(--text); }
+
+  /* ---- consola ---- */
+  .console{
+    background: #0b100d;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--signal);
+    height: 88px;
+    overflow-y: auto;
+    line-height: 1.55;
+  }
+  .console div{ opacity:.5; }
+  .console div:last-child{ opacity:1; }
+  .console .err{ color: var(--danger); }
+
+  /* ---- cruz direccional ---- */
+  .section-title{ font-size: 11px; color: var(--muted); padding: 0 2px; }
+  .dpad{
+    display:grid;
+    grid-template-columns: 64px 64px 64px;
+    grid-template-rows: 64px 64px 64px;
+    gap: 8px;
+    justify-content:center;
+  }
+  .dpad button{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    color: var(--text);
+    display:flex; align-items:center; justify-content:center;
+    padding:0;
+  }
+  .dpad button svg{ width:22px; height:22px; }
+  .dpad button:active{ background: var(--signal-dim); border-color: var(--signal); transform: scale(.94); }
+  .d-up{ grid-column:2; grid-row:1; }
+  .d-left{ grid-column:1; grid-row:2; }
+  .d-stop{ grid-column:2; grid-row:2; border-color:#3a2622 !important; }
+  .d-stop:active{ background: rgba(224,89,79,.18) !important; border-color: var(--danger) !important; }
+  .d-right{ grid-column:3; grid-row:2; }
+  .d-down{ grid-column:2; grid-row:3; }
+
+  .hint{ font-size:11px; color:var(--muted); text-align:center; padding: 0 6px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="conn">
+    <span id="dot" class="dot"></span>
+    <div class="conn-field">
+      <div class="name" id="connName">sin conectar</div>
+      <div class="status" id="connStatus">toca "conectar" y elige NOKA_Mini</div>
+    </div>
+    <button class="btn-connect" id="btnConnect">conectar</button>
+  </div>
+
+  <div class="mic-wrap">
+    <button class="mic-btn" id="micBtn" aria-label="Activar micrófono">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#82938a" stroke-width="1.6">
+        <rect x="9" y="2" width="6" height="12" rx="3"/>
+        <path d="M5 11a7 7 0 0 0 14 0"/>
+        <path d="M12 18v3"/>
+        <path d="M9 21h6"/>
+      </svg>
+    </button>
+    <div class="mic-label" id="micLabel">toca para hablar</div>
+  </div>
+
+  <div class="console" id="console">
+    <div>sistema listo. conecta el robot por bluetooth.</div>
+  </div>
+
+  <div>
+    <div class="section-title">movimiento</div>
+    <div class="dpad">
+      <button class="d-up" data-cmd="avanza"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16M5 11l7-7 7 7"/></svg></button>
+      <button class="d-left" data-cmd="izquierda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12H4M11 5l-7 7 7 7"/></svg></button>
+      <button class="d-stop" data-cmd="detente"><svg viewBox="0 0 24 24" fill="none" stroke="#e0594f" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+      <button class="d-right" data-cmd="derecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M13 5l7 7-7 7"/></svg></button>
+      <button class="d-down" data-cmd="retrocede"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V4M19 13l-7 7-7-7"/></svg></button>
+    </div>
+  </div>
+
+  <div class="hint">di "avanza", "retrocede", "izquierda", "derecha" o "detente"</div>
+</div>
+
+<script>
+  const $ = (sel) => document.querySelector(sel);
+  const dot         = $('#dot');
+  const connName    = $('#connName');
+  const connStatus  = $('#connStatus');
+  const btnConnect  = $('#btnConnect');
+  const micBtn      = $('#micBtn');
+  const micLabel    = $('#micLabel');
+  const consoleEl   = $('#console');
+
+  // ---- UUIDs del servicio Nordic UART (deben coincidir con el firmware) ----
+  const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  const RX_UUID       = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // el celular escribe aquí
+  const TX_UUID       = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // el robot notifica aquí
+
+  let bleDevice = null;
+  let rxCharacteristic = null;
+
+  function log(msg, isErr){
+    const line = document.createElement('div');
+    line.textContent = msg;
+    if(isErr) line.classList.add('err');
+    consoleEl.appendChild(line);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+    while(consoleEl.children.length > 40) consoleEl.removeChild(consoleEl.firstChild);
+  }
+
+  async function conectar(){
+    if(!navigator.bluetooth){
+      log('este navegador no soporta Web Bluetooth (usa Chrome en Android)', true);
+      return;
+    }
+    try{
+      bleDevice = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [SERVICE_UUID] }]
+      });
+
+      connName.textContent = bleDevice.name || 'dispositivo BLE';
+      bleDevice.addEventListener('gattserverdisconnected', onDesconectado);
+
+      const server = await bleDevice.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      rxCharacteristic = await service.getCharacteristic(RX_UUID);
+
+      // Suscribirse a notificaciones del robot (TX)
+      const txCharacteristic = await service.getCharacteristic(TX_UUID);
+      await txCharacteristic.startNotifications();
+      txCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
+        const texto = new TextDecoder().decode(e.target.value);
+        log('> ' + texto);
+      });
+
+      dot.classList.add('on');
+      connStatus.textContent = 'conectado';
+      btnConnect.classList.add('linked');
+      btnConnect.textContent = 'conectado';
+      log('conectado a ' + bleDevice.name);
+    }catch(e){
+      log('no se pudo conectar: ' + e.message, true);
+    }
+  }
+
+  function onDesconectado(){
+    dot.classList.remove('on');
+    connStatus.textContent = 'desconectado';
+    btnConnect.classList.remove('linked');
+    btnConnect.textContent = 'conectar';
+    rxCharacteristic = null;
+    log('conexión perdida', true);
+  }
+
+  btnConnect.addEventListener('click', () => {
+    if(bleDevice && bleDevice.gatt.connected){
+      bleDevice.gatt.disconnect();
+      return;
+    }
+    conectar();
+  });
+
+  async function enviar(comando){
+    if(!rxCharacteristic){
+      log('conecta el robot primero', true);
+      return;
+    }
+    try{
+      const datos = new TextEncoder().encode(comando);
+      await rxCharacteristic.writeValue(datos);
+      log('enviado: ' + comando);
+    }catch(e){
+      log('error al enviar: ' + e.message, true);
+    }
+  }
+
+  document.querySelectorAll('[data-cmd]').forEach(b=>{
+    b.addEventListener('click', () => enviar(b.dataset.cmd));
+  });
+
+  // ---- reconocimiento de voz ----
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognizing = false;
+  let recognition = null;
+
+  if(SpeechRecognition){
+    recognition = new SpeechRecognition();
+    recognition.lang = 'es-CO';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      recognizing = true;
+      micBtn.classList.add('listening');
+      micLabel.textContent = 'escuchando...';
+    };
+    recognition.onend = () => {
+      recognizing = false;
+      micBtn.classList.remove('listening');
+      if(micLabel.textContent === 'escuchando...') micLabel.textContent = 'toca para hablar';
+    };
+    recognition.onerror = (e) => log('error de voz: ' + e.error, true);
+    recognition.onresult = (e) => {
+      const dicho = e.results[0][0].transcript.trim().toLowerCase();
+      micLabel.innerHTML = `<span class="mic-heard">"${dicho}"</span>`;
+      interpretar(dicho);
+    };
+
+    micBtn.addEventListener('click', () => {
+      if(recognizing){ recognition.stop(); return; }
+      try{ recognition.start(); } catch(e){ /* ya iniciando */ }
+    });
+  } else {
+    micLabel.textContent = 'reconocimiento de voz no disponible en este navegador';
+    micBtn.disabled = true;
+  }
+
+  function quitarAcentos(s){
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function interpretar(fraseOriginal){
+    const f = quitarAcentos(fraseOriginal);
+    if(/avanza|adelante/.test(f)){ enviar('avanza'); return; }
+    if(/retrocede|reversa|atras/.test(f)){ enviar('retrocede'); return; }
+    if(/izquierda/.test(f)){ enviar('izquierda'); return; }
+    if(/derecha/.test(f)){ enviar('derecha'); return; }
+    if(/para|alto|detente|quieto|stop/.test(f)){ enviar('detente'); return; }
+    log('comando no reconocido: "' + fraseOriginal + '"', true);
+  }
+</script>
+</body>
+</html>
