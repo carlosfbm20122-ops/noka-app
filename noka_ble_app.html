@@ -140,6 +140,14 @@
   #btnAuto:active{ background: rgba(73,224,141,.16); border-color: var(--signal); }
   #btnAuto.active{ background: rgba(73,224,141,.16); border-color: var(--signal); color: var(--signal); }
   #btnManual:active{ background: rgba(240,169,78,.16); border-color: var(--amber); }
+
+  .cam-box{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display:flex; align-items:center; gap:10px;
+  }
 </style>
 </head>
 <body>
@@ -185,6 +193,15 @@
     <button id="btnAuto" data-cmd="autonomo">🤖 modo autónomo</button>
     <button id="btnManual" data-cmd="manual">🕹️ modo manual</button>
   </div>
+
+  <div class="cam-box">
+    <div class="conn-field" style="flex:1">
+      <label style="font-size:11px;color:var(--muted)">IP de la cámara (app IP Webcam)</label>
+      <input id="camIp" inputmode="decimal" placeholder="192.168.1.55:8080" style="width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:14px;outline:none;" />
+    </div>
+    <button class="btn-connect" id="btnCam">ver cámara</button>
+  </div>
+  <img id="camImg" style="display:none;width:100%;border-radius:12px;border:1px solid var(--line);" />
 
   <div class="hint">di "avanza", "retrocede", "izquierda", "derecha", "detente", "modo autónomo" o "modo manual"</div>
 </div>
@@ -292,6 +309,31 @@
   });
   btnManual.addEventListener('click', () => {
     btnAuto.classList.remove('active');
+  });
+
+  // ---- cámara IP (celular montado en el robot, app tipo "IP Webcam") ----
+  const camIp = $('#camIp');
+  const btnCam = $('#btnCam');
+  const camImg = $('#camImg');
+  camIp.value = localStorage.getItem('noka_cam_ip') || '';
+
+  let camActiva = false;
+  btnCam.addEventListener('click', () => {
+    const ip = camIp.value.trim();
+    if(!ip){ log('escribe la IP:puerto de la cámara primero', true); return; }
+    localStorage.setItem('noka_cam_ip', ip);
+
+    camActiva = !camActiva;
+    if(camActiva){
+      camImg.src = `http://${ip}/video`;
+      camImg.style.display = 'block';
+      btnCam.textContent = 'ocultar cámara';
+      camImg.onerror = () => log('no se pudo cargar la cámara (revisa IP y que esté en la misma WiFi)', true);
+    } else {
+      camImg.src = '';
+      camImg.style.display = 'none';
+      btnCam.textContent = 'ver cámara';
+    }
   });
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
