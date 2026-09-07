@@ -104,7 +104,6 @@
   const btnPilot = $('#btnPilot'), statusEl = $('#status');
   const ctx = overlay.getContext('2d');
 
-  // ---- BLE (mismo servicio que la app de control) ----
   const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
   const RX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
   let rxChar = null;
@@ -118,6 +117,7 @@
       const server = await device.gatt.connect();
       const service = await server.getPrimaryService(SERVICE_UUID);
       rxChar = await service.getCharacteristic(RX_UUID);
+      await rxChar.writeValue(new TextEncoder().encode('sensoroff'));
       dot.classList.add('on');
       connStatus.textContent = 'conectado a ' + (device.name || 'robot');
       btnConnect.classList.add('linked');
@@ -138,14 +138,13 @@
   let ultimoComandoEnviado = '';
   async function enviarComando(comando){
     if(!rxChar) return;
-    if(comando === ultimoComandoEnviado) return; // no repetir el mismo comando en cada ciclo
+    if(comando === ultimoComandoEnviado) return;
     ultimoComandoEnviado = comando;
     try{
       await rxChar.writeValue(new TextEncoder().encode(comando));
     }catch(e){ /* si falla un envío, el siguiente ciclo reintenta */ }
   }
 
-  // ---- Cámara ----
   let camaraActiva = false;
   btnCam.addEventListener('click', async () => {
     if(camaraActiva) return;
@@ -165,14 +164,12 @@
     }
   });
 
-  // ---- Modelo de IA (COCO-SSD: detecta ~80 objetos comunes) ----
   let modelo = null;
   (async () => {
     modelo = await cocoSsd.load();
     statusEl.textContent = 'modelo de IA listo. activa la cámara y el piloto.';
   })();
 
-  // ---- Piloto automático ----
   let pilotoActivo = false;
   btnPilot.addEventListener('click', () => {
     pilotoActivo = !pilotoActivo;
@@ -181,7 +178,7 @@
     if(!pilotoActivo) enviarComando('detente');
   });
 
-  const UMBRAL_AREA_PELIGRO = 0.12; // % del cuadro que ocupa un objeto para considerarlo "cerca"
+  const UMBRAL_AREA_PELIGRO = 0.12;
 
   function dibujarDetecciones(predicciones){
     ctx.clearRect(0, 0, overlay.width, overlay.height);
@@ -217,7 +214,6 @@
       return { comando: 'avanza', razon: 'camino despejado' };
     }
 
-    // hay algo bloqueando el centro: elige el lado con menos obstáculo
     if(areaIzquierda <= areaDerecha){
       return { comando: 'izquierda', razon: 'obstáculo al frente, izquierda más despejada' };
     } else {
@@ -241,7 +237,7 @@
         statusEl.textContent = 'sin objetos detectados';
       }
     }
-    setTimeout(cicloDeVision, 500); // analiza 2 veces por segundo
+    setTimeout(cicloDeVision, 500);
   }
   cicloDeVision();
 </script>
