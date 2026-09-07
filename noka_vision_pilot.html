@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>NOKA · Piloto con Visión IA</title>
+<style>
+  :root{
+    --bg: #0e1512;
+    --panel: #161f1a;
+    --panel-2: #1d2822;
+    --line: #2a362f;
+    --text: #e6ece8;
+    --muted: #82938a;
+    --signal: #49e08d;
+    --danger: #e0594f;
+    --amber: #f0a94e;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{
+    background: radial-gradient(120% 140% at 50% -10%, #14201a 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: var(--sans);
+    display:flex; justify-content:center;
+    min-height:100vh;
+    padding: 14px;
+  }
+  .app{ width:100%; max-width:480px; display:flex; flex-direction:column; gap:14px; }
+
+  .conn{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .dot{ width:9px; height:9px; border-radius:50%; background: var(--danger); flex-shrink:0; }
+  .dot.on{ background: var(--signal); }
+  .conn-field{ flex:1; font-family: var(--mono); font-size: 13px; }
+  .btn{
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 9px 14px; background: var(--panel-2);
+  }
+  .btn:active{ transform: scale(.96); }
+  .btn.linked{ border-color: var(--signal); color: var(--signal); }
+  .btn.on{ border-color: var(--amber); color: var(--amber); }
+
+  .video-wrap{ position:relative; border-radius:14px; overflow:hidden; border:1px solid var(--line); background:#000; }
+  video, canvas{ width:100%; display:block; }
+  canvas{ position:absolute; top:0; left:0; }
+
+  .status{
+    background: #0b100d;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--signal);
+    min-height: 20px;
+  }
+  .status.alerta{ color: var(--amber); }
+
+  .row{ display:flex; gap:10px; }
+  .row .btn{ flex:1; }
+
+  .hint{ font-size:11px; color:var(--muted); text-align:center; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="conn">
+    <span id="dot" class="dot"></span>
+    <div class="conn-field" id="connStatus">sin conectar al robot</div>
+    <button class="btn" id="btnConnect">conectar robot</button>
+  </div>
+
+  <div class="video-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="row">
+    <button class="btn" id="btnCam">activar cámara</button>
+    <button class="btn" id="btnPilot">🧠 piloto automático: apagado</button>
+  </div>
+
+  <div class="status" id="status">cargando modelo de IA...</div>
+
+  <div class="hint">Este celular ve, piensa y maneja el robot solo. Móntalo en el robot apuntando hacia adelante.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<script>
+  const $ = (s) => document.querySelector(s);
+  const dot = $('#dot'), connStatus = $('#connStatus'), btnConnect = $('#btnConnect');
+  const video = $('#video'), overlay = $('#overlay'), btnCam = $('#btnCam');
+  const btnPilot = $('#btnPilot'), statusEl = $('#status');
+  const ctx = overlay.getContext('2d');
+
+  // ---- BLE (mismo servicio que la app de control) ----
+  const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  const RX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+  let rxChar = null;
+
+  async function conectarRobot(){
+    try{
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID]
+      });
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      rxChar = await service.getCharacteristic(RX_UUID);
+      dot.classList.add('on');
+      connStatus.textContent = 'conectado a ' + (device.name || 'robot');
+      btnConnect.classList.add('linked');
+      btnConnect.textContent = 'conectado';
+      device.addEventListener('gattserverdisconnected', () => {
+        dot.classList.remove('on');
+        connStatus.textContent = 'desconectado';
+        btnConnect.classList.remove('linked');
+        btnConnect.textContent = 'conectar robot';
+        rxChar = null;
+      });
+    }catch(e){
+      connStatus.textContent = 'error: ' + e.message;
+    }
+  }
+  btnConnect.addEventListener('click', conectarRobot);
+
+  let ultimoComandoEnviado = '';
+  async function enviarComando(comando){
+    if(!rxChar) return;
+    if(comando === ultimoComandoEnviado) return; // no repetir el mismo comando en cada ciclo
+    ultimoComandoEnviado = comando;
+    try{
+      await rxChar.writeValue(new TextEncoder().encode(comando));
+    }catch(e){ /* si falla un envío, el siguiente ciclo reintenta */ }
+  }
+
+  // ---- Cámara ----
+  let camaraActiva = false;
+  btnCam.addEventListener('click', async () => {
+    if(camaraActiva) return;
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: 640, height: 480 }
+      });
+      video.srcObject = stream;
+      await video.play();
+      overlay.width = video.videoWidth;
+      overlay.height = video.videoHeight;
+      camaraActiva = true;
+      btnCam.textContent = 'cámara activa';
+      btnCam.classList.add('linked');
+    }catch(e){
+      statusEl.textContent = 'no se pudo abrir la cámara: ' + e.message;
+    }
+  });
+
+  // ---- Modelo de IA (COCO-SSD: detecta ~80 objetos comunes) ----
+  let modelo = null;
+  (async () => {
+    modelo = await cocoSsd.load();
+    statusEl.textContent = 'modelo de IA listo. activa la cámara y el piloto.';
+  })();
+
+  // ---- Piloto automático ----
+  let pilotoActivo = false;
+  btnPilot.addEventListener('click', () => {
+    pilotoActivo = !pilotoActivo;
+    btnPilot.textContent = pilotoActivo ? '🧠 piloto automático: encendido' : '🧠 piloto automático: apagado';
+    btnPilot.classList.toggle('on', pilotoActivo);
+    if(!pilotoActivo) enviarComando('detente');
+  });
+
+  const UMBRAL_AREA_PELIGRO = 0.12; // % del cuadro que ocupa un objeto para considerarlo "cerca"
+
+  function dibujarDetecciones(predicciones){
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    ctx.font = '14px monospace';
+    predicciones.forEach(p => {
+      const [x, y, w, h] = p.bbox;
+      ctx.strokeStyle = '#49e08d';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = '#49e08d';
+      ctx.fillText(`${p.class} (${Math.round(p.score*100)}%)`, x + 4, y > 16 ? y - 4 : y + 14);
+    });
+  }
+
+  function decidirMovimiento(predicciones){
+    const areaTotal = overlay.width * overlay.height;
+    const anchoTercio = overlay.width / 3;
+
+    let areaIzquierda = 0, areaCentro = 0, areaDerecha = 0;
+    let peligroCentro = false;
+
+    predicciones.forEach(p => {
+      const [x, y, w, h] = p.bbox;
+      const area = (w * h) / areaTotal;
+      const centroX = x + w / 2;
+
+      if(centroX < anchoTercio) areaIzquierda += area;
+      else if(centroX < anchoTercio * 2) { areaCentro += area; if(area > UMBRAL_AREA_PELIGRO) peligroCentro = true; }
+      else areaDerecha += area;
+    });
+
+    if(!peligroCentro){
+      return { comando: 'avanza', razon: 'camino despejado' };
+    }
+
+    // hay algo bloqueando el centro: elige el lado con menos obstáculo
+    if(areaIzquierda <= areaDerecha){
+      return { comando: 'izquierda', razon: 'obstáculo al frente, izquierda más despejada' };
+    } else {
+      return { comando: 'derecha', razon: 'obstáculo al frente, derecha más despejada' };
+    }
+  }
+
+  async function cicloDeVision(){
+    if(camaraActiva && modelo){
+      const predicciones = await modelo.detect(video);
+      dibujarDetecciones(predicciones);
+
+      if(pilotoActivo){
+        const decision = decidirMovimiento(predicciones);
+        statusEl.textContent = `[piloto] ${decision.comando} — ${decision.razon}`;
+        statusEl.classList.toggle('alerta', decision.comando !== 'avanza');
+        enviarComando(decision.comando);
+      } else if(predicciones.length > 0) {
+        statusEl.textContent = `viendo: ${predicciones.map(p=>p.class).join(', ')}`;
+      } else {
+        statusEl.textContent = 'sin objetos detectados';
+      }
+    }
+    setTimeout(cicloDeVision, 500); // analiza 2 veces por segundo
+  }
+  cicloDeVision();
+</script>
+</body>
+</html>
