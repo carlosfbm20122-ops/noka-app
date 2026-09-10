@@ -92,14 +92,15 @@
 
   <div class="conn">
     <div class="conn-field" style="flex:1">
-      <label style="font-size:11px;color:var(--muted)">Clave API de Groq (opcional, para razonar mejor)</label>
-      <input id="groqKey" type="password" placeholder="gsk_..." style="width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;" />
+      <label style="font-size:11px;color:var(--muted)">Razonamiento IA (vía tu proxy)</label>
+      <div id="iaStatus" style="font-family:var(--mono);font-size:13px;">desactivado</div>
     </div>
+    <button class="btn" id="btnUsarIA">activar IA</button>
   </div>
 
   <div class="status" id="status">cargando modelo de IA...</div>
 
-  <div class="hint">La clave se guarda solo en este celular (nunca se sube a GitHub). Con o sin clave, el piloto igual esquiva usando el modelo local; con clave, además le pregunta a Groq para decidir mejor.</div>
+  <div class="hint">La clave de la IA vive protegida en tu propio servidor (Cloudflare), nunca en esta app. "activar IA" solo prende/apaga si se usa.</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
@@ -177,10 +178,17 @@
     statusEl.textContent = 'modelo de IA listo. activa la cámara y el piloto.';
   })();
 
-  const groqKeyInput = $('#groqKey');
-  groqKeyInput.value = localStorage.getItem('noka_groq_key') || '';
-  groqKeyInput.addEventListener('change', () => {
-    localStorage.setItem('noka_groq_key', groqKeyInput.value.trim());
+  const WORKER_URL = 'https://noka-mini.carlosfbm20122.workers.dev';
+  const btnUsarIA = $('#btnUsarIA');
+  const iaStatus = $('#iaStatus');
+  let usarIA = localStorage.getItem('noka_usar_ia') === 'true';
+  iaStatus.textContent = usarIA ? 'activado' : 'desactivado';
+  btnUsarIA.classList.toggle('linked', usarIA);
+  btnUsarIA.addEventListener('click', () => {
+    usarIA = !usarIA;
+    localStorage.setItem('noka_usar_ia', usarIA);
+    iaStatus.textContent = usarIA ? 'activado' : 'desactivado';
+    btnUsarIA.classList.toggle('linked', usarIA);
   });
 
   const canvasCaptura = document.createElement('canvas');
@@ -193,63 +201,44 @@
 
   const COMANDOS_VALIDOS = ['avanza', 'izquierda', 'derecha', 'detente'];
 
-  async function consultarGroq(){
-    const apiKey = groqKeyInput.value.trim();
-    if(!apiKey) return null;
-
+  async function consultarIA(){
     try{
       const imagenBase64 = capturarFrameBase64();
-      const respuesta = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const respuesta = await fetch(WORKER_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'llama-3.2-11b-vision-preview',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Eres el piloto de un robot pequeño con cámara al frente. Mira la imagen y decide el movimiento más seguro. Responde ÚNICAMENTE con una de estas palabras exactas, sin nada más: avanza, izquierda, derecha, detente. Responde "detente" si no estás seguro o si algo bloquea el paso de cerca.' },
-              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imagenBase64}` } }
-            ]
-          }],
-          max_tokens: 10,
-          temperature: 0
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagenBase64 })
       });
 
       if(!respuesta.ok){
         const err = await respuesta.text();
-        statusEl.textContent = `[Groq] error ${respuesta.status}: ${err.slice(0,80)}`;
+        statusEl.textContent = `[IA] error ${respuesta.status}: ${err.slice(0,80)}`;
         return null;
       }
 
       const datos = await respuesta.json();
-      const texto = (datos.choices?.[0]?.message?.content || '').trim().toLowerCase();
-      const comando = COMANDOS_VALIDOS.find(c => texto.includes(c));
-      return comando || 'detente';
+      return COMANDOS_VALIDOS.includes(datos.comando) ? datos.comando : 'detente';
     }catch(e){
-      statusEl.textContent = '[Groq] no se pudo consultar: ' + e.message;
+      statusEl.textContent = '[IA] no se pudo consultar: ' + e.message;
       return null;
     }
   }
 
-  let consultandoGroq = false;
-  async function cicloGroq(){
-    if(pilotoActivo && camaraActiva && !consultandoGroq && groqKeyInput.value.trim()){
-      consultandoGroq = true;
-      const comando = await consultarGroq();
+  let consultandoIA = false;
+  async function cicloIA(){
+    if(pilotoActivo && camaraActiva && !consultandoIA && usarIA){
+      consultandoIA = true;
+      const comando = await consultarIA();
       if(comando){
-        statusEl.textContent = `[Groq] ${comando}`;
+        statusEl.textContent = `[IA] ${comando}`;
         statusEl.classList.toggle('alerta', comando !== 'avanza');
         enviarComando(comando);
       }
-      consultandoGroq = false;
+      consultandoIA = false;
     }
-    setTimeout(cicloGroq, 2500);
+    setTimeout(cicloIA, 2500);
   }
-  cicloGroq();
+  cicloIA();
 
   let pilotoActivo = false;
   btnPilot.addEventListener('click', () => {
@@ -306,36 +295,3 @@
     if(camaraActiva && modelo){
       const predicciones = await modelo.detect(video);
       dibujarDetecciones(predicciones);
-
-      if(pilotoActivo){
-        const areaTotal = overlay.width * overlay.height;
-        const anchoTercio = overlay.width / 3;
-        const peligroInminente = predicciones.some(p => {
-          const [x, , w, h] = p.bbox;
-          const centroX = x + w / 2;
-          const enCentro = centroX > anchoTercio && centroX < anchoTercio * 2;
-          return enCentro && (w * h) / areaTotal > 0.25;
-        });
-
-        if(peligroInminente){
-          statusEl.textContent = '[reflejo] ¡muy cerca! deteniendo';
-          statusEl.classList.add('alerta');
-          enviarComando('detente');
-        } else if(!groqKeyInput.value.trim()){
-          const decision = decidirMovimiento(predicciones);
-          statusEl.textContent = `[local] ${decision.comando} — ${decision.razon}`;
-          statusEl.classList.toggle('alerta', decision.comando !== 'avanza');
-          enviarComando(decision.comando);
-        }
-      } else if(predicciones.length > 0) {
-        statusEl.textContent = `viendo: ${predicciones.map(p=>p.class).join(', ')}`;
-      } else {
-        statusEl.textContent = 'sin objetos detectados';
-      }
-    }
-    setTimeout(cicloDeVision, 500);
-  }
-  cicloDeVision();
-</script>
-</body>
-</html>
