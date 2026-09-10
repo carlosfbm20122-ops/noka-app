@@ -112,6 +112,7 @@
   const btnPilot = $('#btnPilot'), statusEl = $('#status');
   const ctx = overlay.getContext('2d');
 
+  // ---- BLE (mismo servicio que la app de control) ----
   const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
   const RX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
   let rxChar = null;
@@ -125,6 +126,7 @@
       const server = await device.gatt.connect();
       const service = await server.getPrimaryService(SERVICE_UUID);
       rxChar = await service.getCharacteristic(RX_UUID);
+      // Apaga el sensor ultrasónico del ESP32: el piloto de visión es quien decide ahora
       await rxChar.writeValue(new TextEncoder().encode('sensoroff'));
       dot.classList.add('on');
       connStatus.textContent = 'conectado a ' + (device.name || 'robot');
@@ -146,13 +148,14 @@
   let ultimoComandoEnviado = '';
   async function enviarComando(comando){
     if(!rxChar) return;
-    if(comando === ultimoComandoEnviado) return;
+    if(comando === ultimoComandoEnviado) return; // no repetir el mismo comando en cada ciclo
     ultimoComandoEnviado = comando;
     try{
       await rxChar.writeValue(new TextEncoder().encode(comando));
     }catch(e){ /* si falla un envío, el siguiente ciclo reintenta */ }
   }
 
+  // ---- Cámara ----
   let camaraActiva = false;
   btnCam.addEventListener('click', async () => {
     if(camaraActiva) return;
@@ -172,12 +175,14 @@
     }
   });
 
+  // ---- Modelo de IA (COCO-SSD: detecta ~80 objetos comunes) ----
   let modelo = null;
   (async () => {
     modelo = await cocoSsd.load();
     statusEl.textContent = 'modelo de IA listo. activa la cámara y el piloto.';
   })();
 
+  // ---- IA remota (vía tu Worker propio de Cloudflare, que guarda la clave protegida) ----
   const WORKER_URL = 'https://noka-mini.carlosfbm20122.workers.dev';
   const btnUsarIA = $('#btnUsarIA');
   const iaStatus = $('#iaStatus');
@@ -236,10 +241,11 @@
       }
       consultandoIA = false;
     }
-    setTimeout(cicloIA, 2500);
+    setTimeout(cicloIA, 2500); // la IA razona cada ~2.5s (más lento pero más inteligente)
   }
   cicloIA();
 
+  // ---- Piloto automático ----
   let pilotoActivo = false;
   btnPilot.addEventListener('click', () => {
     pilotoActivo = !pilotoActivo;
@@ -248,7 +254,7 @@
     if(!pilotoActivo) enviarComando('detente');
   });
 
-  const UMBRAL_AREA_PELIGRO = 0.12;
+  const UMBRAL_AREA_PELIGRO = 0.12; // % del cuadro que ocupa un objeto para considerarlo "cerca"
 
   function dibujarDetecciones(predicciones){
     ctx.clearRect(0, 0, overlay.width, overlay.height);
@@ -284,6 +290,7 @@
       return { comando: 'avanza', razon: 'camino despejado' };
     }
 
+    // hay algo bloqueando el centro: elige el lado con menos obstáculo
     if(areaIzquierda <= areaDerecha){
       return { comando: 'izquierda', razon: 'obstáculo al frente, izquierda más despejada' };
     } else {
@@ -295,3 +302,40 @@
     if(camaraActiva && modelo){
       const predicciones = await modelo.detect(video);
       dibujarDetecciones(predicciones);
+
+      if(pilotoActivo){
+        // Reflejo rápido: si algo ocupa MUCHO del centro (muy cerca), frena YA
+        // sin esperar la respuesta de Groq (que tarda más por ir a internet).
+        const areaTotal = overlay.width * overlay.height;
+        const anchoTercio = overlay.width / 3;
+        const peligroInminente = predicciones.some(p => {
+          const [x, , w, h] = p.bbox;
+          const centroX = x + w / 2;
+          const enCentro = centroX > anchoTercio && centroX < anchoTercio * 2;
+          return enCentro && (w * h) / areaTotal > 0.25;
+        });
+
+        if(peligroInminente){
+          statusEl.textContent = '[reflejo] ¡muy cerca! deteniendo';
+          statusEl.classList.add('alerta');
+          enviarComando('detente');
+        } else if(!usarIA){
+          // sin IA activada: usa solo el modelo local para decidir todo
+          const decision = decidirMovimiento(predicciones);
+          statusEl.textContent = `[local] ${decision.comando} — ${decision.razon}`;
+          statusEl.classList.toggle('alerta', decision.comando !== 'avanza');
+          enviarComando(decision.comando);
+        }
+        // si la IA está activada y no hay peligro inminente, cicloIA() maneja la decisión
+      } else if(predicciones.length > 0) {
+        statusEl.textContent = `viendo: ${predicciones.map(p=>p.class).join(', ')}`;
+      } else {
+        statusEl.textContent = 'sin objetos detectados';
+      }
+    }
+    setTimeout(cicloDeVision, 500);
+  }
+  cicloDeVision();
+</script>
+</body>
+</html>
