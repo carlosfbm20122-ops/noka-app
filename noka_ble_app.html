@@ -1,392 +1,2223 @@
-<!DOCTYPE html>
+
+<!doctype html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>NOKA MINI · Control BLE</title>
-<style>
-  :root{
-    --bg: #0e1512;
-    --panel: #161f1a;
-    --panel-2: #1d2822;
-    --line: #2a362f;
-    --text: #e6ece8;
-    --muted: #82938a;
-    --signal: #49e08d;
-    --signal-dim: #234838;
-    --amber: #f0a94e;
-    --danger: #e0594f;
-    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
-  *{ box-sizing:border-box; }
-  html,body{ margin:0; height:100%; }
-  body{
-    background: radial-gradient(120% 140% at 50% -10%, #14201a 0%, var(--bg) 55%);
-    color: var(--text);
-    font-family: var(--sans);
-    -webkit-tap-highlight-color: transparent;
-    display:flex; justify-content:center;
-    min-height:100vh;
-    padding: 18px 14px 28px;
-  }
-  .app{ width:100%; max-width:420px; display:flex; flex-direction:column; gap:16px; }
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NOKA Clean</title>
+  <style>
+    :root {
+      --ink: #11181c;
+      --soft-ink: #34444c;
+      --muted: #728189;
+      --hairline: rgba(17, 24, 28, .08);
+      --paper: #eef4f2;
+      --panel: rgba(255, 255, 255, .78);
+      --panel-solid: #ffffff;
+      --control-surface: rgba(255, 255, 255, .62);
+      --control-button: linear-gradient(145deg, rgba(255, 255, 255, .98), rgba(236, 244, 242, .9));
+      --robot-accent-a: #057866;
+      --robot-accent-b: #21c69b;
+      --robot-eye: #21c69b;
+      --robot-eye-glow: #d9fff4;
+      --mint: #21c69b;
+      --teal: #057866;
+      --blue: #246fde;
+      --gold: #d99b35;
+      --red: #d74b48;
+      --shadow: 0 24px 70px rgba(16, 33, 39, .16);
+      --soft-shadow: 0 12px 34px rgba(16, 33, 39, .1);
+    }
 
-  .conn{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 12px 14px;
-    display:flex; align-items:center; gap:10px;
-  }
-  .dot{
-    width:9px; height:9px; border-radius:50%;
-    background: var(--danger);
-    flex-shrink:0;
-  }
-  .dot.on{ background: var(--signal); animation: pulse 1.8s infinite; }
-  @keyframes pulse{
-    0%{ box-shadow: 0 0 0 0 rgba(73,224,141,.45); }
-    70%{ box-shadow: 0 0 0 7px rgba(73,224,141,0); }
-    100%{ box-shadow: 0 0 0 0 rgba(73,224,141,0); }
-  }
-  .conn-field{ flex:1; min-width:0; }
-  .conn-field .name{ font-family: var(--mono); font-size: 14px; }
-  .conn-field .status{ font-size: 11px; color: var(--muted); }
-  .btn-connect{
-    font-family: var(--mono); font-size: 12px; color: var(--text);
-    border: 1px solid var(--line); border-radius: 8px;
-    padding: 8px 12px; background: var(--panel-2); flex-shrink:0;
-  }
-  .btn-connect:active{ transform: scale(.96); }
-  .btn-connect.linked{ border-color: var(--signal); color: var(--signal); }
+    body.luxury {
+      --ink: #fff9e9;
+      --soft-ink: #f0d99a;
+      --muted: #b8a77b;
+      --hairline: rgba(223, 181, 92, .18);
+      --paper: #080806;
+      --panel: rgba(24, 22, 16, .86);
+      --panel-solid: #14120d;
+      --control-surface: rgba(9, 9, 7, .72);
+      --control-button: linear-gradient(145deg, #242016, #0c0b08);
+      --robot-accent-a: #b98222;
+      --robot-accent-b: #ffe39a;
+      --robot-eye: #e8b84f;
+      --robot-eye-glow: #fff7dc;
+      --mint: #dfb55c;
+      --teal: #c99a3c;
+      --blue: #f0d996;
+      --gold: #f2ca72;
+      --red: #c94444;
+      --shadow: 0 30px 80px rgba(0, 0, 0, .46);
+      --soft-shadow: 0 16px 42px rgba(0, 0, 0, .3);
+      background:
+        radial-gradient(circle at 18% -10%, rgba(223, 181, 92, .22), transparent 34%),
+        radial-gradient(circle at 92% 8%, rgba(255, 238, 176, .1), transparent 30%),
+        linear-gradient(135deg, #050504, #19150d 55%, #080806);
+    }
 
-  .mic-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; margin: 6px 0 2px; }
-  .mic-btn{
-    width: 132px; height:132px; border-radius:50%;
-    background: radial-gradient(circle at 35% 30%, var(--panel-2), #0f1713 70%);
-    border: 1px solid var(--line);
-    display:flex; align-items:center; justify-content:center;
-    position:relative;
-    transition: transform .12s ease;
-  }
-  .mic-btn:active{ transform: scale(.95); }
-  .mic-btn.listening{ border-color: var(--signal); animation: ring 1.4s infinite; }
-  @keyframes ring{
-    0%{ box-shadow: 0 0 0 0 rgba(73,224,141,.45); }
-    70%{ box-shadow: 0 0 0 18px rgba(73,224,141,0); }
-    100%{ box-shadow: 0 0 0 0 rgba(73,224,141,0); }
-  }
-  .mic-btn svg{ width:44px; height:44px; }
-  .mic-btn.listening svg path, .mic-btn.listening svg rect{ stroke: var(--signal); }
-  .mic-label{ font-family: var(--mono); font-size: 12px; color: var(--muted); text-align:center; min-height:16px; }
-  .mic-heard{ color: var(--text); }
+    * { box-sizing: border-box; }
 
-  .console{
-    background: #0b100d;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 10px 12px;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--signal);
-    height: 88px;
-    overflow-y: auto;
-    line-height: 1.55;
-  }
-  .console div{ opacity:.5; }
-  .console div:last-child{ opacity:1; }
-  .console .err{ color: var(--danger); }
+    @media (prefers-reduced-motion: no-preference) {
+      * {
+        scroll-behavior: smooth;
+      }
+    }
 
-  .section-title{ font-size: 11px; color: var(--muted); padding: 0 2px; }
-  .dpad{
-    display:grid;
-    grid-template-columns: 64px 64px 64px;
-    grid-template-rows: 64px 64px 64px;
-    gap: 8px;
-    justify-content:center;
-  }
-  .dpad button{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    color: var(--text);
-    display:flex; align-items:center; justify-content:center;
-    padding:0;
-  }
-  .dpad button svg{ width:22px; height:22px; }
-  .dpad button:active{ background: var(--signal-dim); border-color: var(--signal); transform: scale(.94); }
-  .d-up{ grid-column:2; grid-row:1; }
-  .d-left{ grid-column:1; grid-row:2; }
-  .d-stop{ grid-column:2; grid-row:2; border-color:#3a2622 !important; }
-  .d-stop:active{ background: rgba(224,89,79,.18) !important; border-color: var(--danger) !important; }
-  .d-right{ grid-column:3; grid-row:2; }
-  .d-down{ grid-column:2; grid-row:3; }
+    html {
+      min-height: 100%;
+      background:
+        radial-gradient(circle at 20% -10%, rgba(33, 198, 155, .28), transparent 34%),
+        radial-gradient(circle at 90% 0%, rgba(36, 111, 222, .2), transparent 32%),
+        linear-gradient(135deg, #e8f0ee, #f8fbfa 42%, #eaf1f4);
+    }
 
-  .hint{ font-size:11px; color:var(--muted); text-align:center; padding: 0 6px; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      letter-spacing: 0;
+    }
 
-  .pala-row{ display:flex; gap:10px; }
-  .pala-row button{
-    flex:1;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    color: var(--text);
-    padding: 12px 10px;
-    font-size: 13px;
-    font-family: var(--sans);
-  }
-  .pala-row button:active{ transform: scale(.97); }
-  #btnAuto:active{ background: rgba(73,224,141,.16); border-color: var(--signal); }
-  #btnAuto.active{ background: rgba(73,224,141,.16); border-color: var(--signal); color: var(--signal); }
-  #btnManual:active{ background: rgba(240,169,78,.16); border-color: var(--amber); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
 
-  .cam-box{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 12px 14px;
-    display:flex; align-items:center; gap:10px;
-  }
-</style>
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+    }
+
+    .phone {
+      position: relative;
+      width: min(100vw, 480px);
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(240, 246, 244, .92)),
+        radial-gradient(circle at 74% 10%, rgba(33, 198, 155, .15), transparent 32%);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, .64), var(--shadow);
+    }
+
+    body.luxury .phone {
+      background:
+        linear-gradient(180deg, rgba(20, 18, 13, .95), rgba(8, 8, 6, .96)),
+        radial-gradient(circle at 74% 10%, rgba(223, 181, 92, .16), transparent 32%);
+      box-shadow: 0 0 0 1px rgba(223, 181, 92, .18), var(--shadow);
+    }
+
+    .phone::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: linear-gradient(rgba(17, 24, 28, .035) 1px, transparent 1px);
+      background-size: 100% 42px;
+      mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 72%, transparent 100%);
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 8;
+      padding: 16px 16px 12px;
+      background: rgba(250, 253, 252, .8);
+      border-bottom: 1px solid rgba(255, 255, 255, .72);
+      backdrop-filter: blur(22px);
+    }
+
+    body.luxury header,
+    body.luxury nav {
+      background: rgba(13, 12, 9, .82);
+      border-color: rgba(223, 181, 92, .16);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 12px;
+      color: #fff;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .26), transparent 38%),
+        linear-gradient(135deg, #084f48, var(--mint));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .38), 0 14px 30px rgba(5, 120, 102, .32);
+      font-size: 14px;
+      font-weight: 900;
+      animation: brandPulse 5.5s ease-in-out infinite;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      font-size: 19px;
+      line-height: 1.1;
+    }
+
+    .subtitle {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status-pill {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 11px;
+      border: 1px solid rgba(33, 198, 155, .22);
+      border-radius: 999px;
+      color: var(--teal);
+      background: rgba(232, 250, 245, .84);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9);
+    }
+
+    body.luxury .status-pill {
+      color: #17130b;
+      background: linear-gradient(135deg, #ffe7a5, #d7a646);
+      border-color: rgba(255, 224, 146, .45);
+      box-shadow: 0 12px 28px rgba(223, 181, 92, .18), inset 0 1px 0 rgba(255, 255, 255, .45);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .theme-toggle {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(33, 198, 155, .2);
+      border-radius: 999px;
+      color: var(--teal);
+      background: rgba(255, 255, 255, .72);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 10px 22px rgba(16, 33, 39, .08);
+    }
+
+    .connect-button {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid rgba(33, 198, 155, .2);
+      border-radius: 999px;
+      padding: 0 11px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--teal), var(--mint));
+      box-shadow: 0 12px 26px rgba(5, 120, 102, .2), inset 0 1px 0 rgba(255, 255, 255, .28);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .connect-button svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    body.luxury .theme-toggle {
+      color: #17130b;
+      background: linear-gradient(135deg, #ffe7a5, #c99734);
+      border-color: rgba(255, 235, 178, .42);
+    }
+
+    body.luxury .connect-button {
+      color: #17130b;
+      background: linear-gradient(135deg, #fff0bd, #c99734);
+      border-color: rgba(255, 235, 178, .42);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 5px rgba(33, 198, 155, .17);
+      animation: liveDot 1.8s ease-in-out infinite;
+    }
+
+    main {
+      position: relative;
+      z-index: 1;
+      overflow: auto;
+      padding: 14px 14px 98px;
+    }
+
+    .screen {
+      display: none;
+      transform-origin: 50% 18px;
+      animation: screenIn .42s cubic-bezier(.2, .78, .2, 1) both;
+    }
+
+    .screen.active { display: block; }
+
+    @keyframes screenIn {
+      from { opacity: 0; transform: translateY(14px) scale(.985); filter: blur(8px); }
+      to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    }
+
+    @keyframes brandPulse {
+      0%, 100% { transform: translateY(0); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .38), 0 14px 30px rgba(5, 120, 102, .32); }
+      50% { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 18px 38px rgba(5, 120, 102, .38); }
+    }
+
+    @keyframes liveDot {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 4px rgba(33, 198, 155, .16); }
+      50% { transform: scale(.78); box-shadow: 0 0 0 8px rgba(33, 198, 155, .07); }
+    }
+
+    .hero {
+      position: relative;
+      min-height: 255px;
+      margin: -14px -14px 14px;
+      padding: 23px 18px;
+      overflow: hidden;
+      background:
+        linear-gradient(145deg, rgba(14, 37, 45, .06), transparent 34%),
+        radial-gradient(circle at 78% 25%, rgba(36, 111, 222, .2), transparent 28%),
+        linear-gradient(155deg, #d9f4ec 0%, #f9fcfb 54%, #e9eff4 100%);
+      border-bottom: 1px solid rgba(255, 255, 255, .9);
+    }
+
+    body.luxury .hero {
+      background:
+        linear-gradient(145deg, rgba(255, 231, 165, .09), transparent 34%),
+        radial-gradient(circle at 78% 25%, rgba(223, 181, 92, .22), transparent 29%),
+        linear-gradient(155deg, #0d0c09 0%, #1a1710 52%, #070705 100%);
+      border-bottom-color: rgba(223, 181, 92, .18);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -28px;
+      bottom: -35px;
+      width: 230px;
+      height: 230px;
+      border-radius: 50%;
+      background: conic-gradient(from 220deg, rgba(33, 198, 155, .2), rgba(36, 111, 222, .14), rgba(255, 255, 255, 0), rgba(33, 198, 155, .2));
+      opacity: .72;
+      animation: haloSpin 16s linear infinite;
+    }
+
+    @keyframes haloSpin {
+      to { transform: rotate(360deg); }
+    }
+
+    body.luxury .hero::after {
+      background: conic-gradient(from 220deg, rgba(223, 181, 92, .3), rgba(255, 242, 191, .12), rgba(255, 255, 255, 0), rgba(223, 181, 92, .26));
+    }
+
+    .eyebrow {
+      margin-bottom: 9px;
+      color: var(--teal);
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    body.luxury .eyebrow {
+      color: #e0ae4c;
+    }
+
+    .hero h2 {
+      max-width: 250px;
+      font-size: 38px;
+      line-height: .96;
+      letter-spacing: 0;
+    }
+
+    body.luxury .hero h2 {
+      color: #fff5d8;
+      text-shadow: 0 14px 34px rgba(0, 0, 0, .5);
+    }
+
+    .hero p {
+      max-width: 235px;
+      margin-top: 11px;
+      color: var(--soft-ink);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    body.luxury .hero p {
+      color: #e6d4a3;
+    }
+
+    .robot-art {
+      position: absolute;
+      right: -2px;
+      bottom: 0;
+      z-index: 2;
+      width: 238px;
+      max-width: 54%;
+      filter: drop-shadow(0 28px 26px rgba(17, 24, 28, .26));
+      animation: robotFloat 4.8s ease-in-out infinite;
+    }
+
+    body.cleaning .robot-art {
+      animation: robotClean 1.45s ease-in-out infinite;
+    }
+
+    body.updating .robot-art {
+      animation: robotUpdate 1.1s ease-in-out infinite;
+    }
+
+    body.alert .robot-art {
+      animation: robotAlert .28s ease-in-out 4;
+    }
+
+    body.luxury .robot-art {
+      filter: drop-shadow(0 32px 30px rgba(0, 0, 0, .54));
+    }
+
+    @keyframes robotFloat {
+      0%, 100% { transform: translateY(0) rotate(.2deg); }
+      50% { transform: translateY(-7px) rotate(-.6deg); }
+    }
+
+    @keyframes robotClean {
+      0%, 100% { transform: translateX(0) translateY(0) rotate(.2deg); }
+      25% { transform: translateX(4px) translateY(-4px) rotate(.8deg); }
+      50% { transform: translateX(0) translateY(-7px) rotate(-.4deg); }
+      75% { transform: translateX(-4px) translateY(-4px) rotate(-.8deg); }
+    }
+
+    @keyframes robotUpdate {
+      0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 32px 30px rgba(0, 0, 0, .28)); }
+      50% { transform: translateY(-5px) scale(1.025); filter: drop-shadow(0 32px 34px rgba(223, 181, 92, .34)); }
+    }
+
+    @keyframes robotAlert {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+
+    .glass {
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, .75);
+      border-radius: 18px;
+      box-shadow: var(--soft-shadow);
+      backdrop-filter: blur(22px);
+    }
+
+    body.luxury .glass {
+      border-color: rgba(223, 181, 92, .18);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 231, 165, .08);
+    }
+
+    .card {
+      background: var(--panel-solid);
+      border: 1px solid var(--hairline);
+      border-radius: 16px;
+      box-shadow: var(--soft-shadow);
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .screen.active .stack > *,
+    .screen.active .summary,
+    .screen.active .hero {
+      animation: cardIn .5s cubic-bezier(.2, .78, .2, 1) both;
+    }
+
+    .screen.active .stack > *:nth-child(2) { animation-delay: .06s; }
+    .screen.active .stack > *:nth-child(3) { animation-delay: .12s; }
+    .screen.active .stack > *:nth-child(4) { animation-delay: .18s; }
+
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      overflow: hidden;
+      background: rgba(17, 24, 28, .08);
+      border-radius: 16px;
+      box-shadow: var(--soft-shadow);
+    }
+
+    .metric {
+      min-height: 84px;
+      padding: 14px;
+      background: rgba(255, 255, 255, .9);
+    }
+
+    body.luxury .metric {
+      background: rgba(20, 18, 13, .94);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 20px;
+      line-height: 1.1;
+    }
+
+    .section { padding: 16px; }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 13px;
+    }
+
+    .section h3 {
+      font-size: 17px;
+      line-height: 1.1;
+    }
+
+    .tag {
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 9px;
+      border-radius: 999px;
+      color: var(--teal);
+      background: rgba(33, 198, 155, .11);
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .tile {
+      min-height: 112px;
+      display: grid;
+      align-content: space-between;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid rgba(17, 24, 28, .08);
+      border-radius: 16px;
+      background: linear-gradient(145deg, rgba(255, 255, 255, .92), rgba(246, 250, 249, .82));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .95);
+      text-align: left;
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
+    }
+
+    .tile:hover,
+    .list-row:hover,
+    .ghost-button:hover,
+    .premium-button:hover {
+      transform: translateY(-2px);
+    }
+
+    .tile:active,
+    .list-row:active,
+    .ghost-button:active,
+    .premium-button:active {
+      transform: translateY(0) scale(.985);
+    }
+
+    body.luxury .tile,
+    body.luxury .list-row,
+    body.luxury .theme-choice,
+    body.luxury select,
+    body.luxury .text-field {
+      background: rgba(255, 255, 255, .045);
+      border-color: rgba(223, 181, 92, .16);
+      color: var(--ink);
+    }
+
+    .tile-icon, .list-icon {
+      display: grid;
+      place-items: center;
+      color: var(--teal);
+      background: linear-gradient(145deg, rgba(33, 198, 155, .17), rgba(36, 111, 222, .08));
+      border: 1px solid rgba(33, 198, 155, .14);
+      transition: transform .2s ease, filter .2s ease;
+    }
+
+    .tile:hover .tile-icon,
+    .list-row:hover .list-icon {
+      transform: scale(1.06) rotate(-2deg);
+      filter: brightness(1.06);
+    }
+
+    body.luxury .tile-icon,
+    body.luxury .list-icon {
+      color: #e4b75c;
+      background: linear-gradient(145deg, rgba(223, 181, 92, .22), rgba(255, 255, 255, .04));
+      border-color: rgba(223, 181, 92, .2);
+    }
+
+    .tile-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 13px;
+    }
+
+    .tile-icon svg, .list-icon svg, .nav-item svg, .round-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .tile strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .tile span span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .list-row {
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      align-items: center;
+      gap: 12px;
+      min-height: 64px;
+      padding: 11px;
+      border: 1px solid rgba(17, 24, 28, .08);
+      border-radius: 15px;
+      background: rgba(255, 255, 255, .72);
+      transition: transform .18s ease, background .18s ease, border-color .18s ease;
+    }
+
+    .list-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+    }
+
+    .list-row strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .list-row small {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .chev {
+      color: var(--muted);
+      font-size: 19px;
+    }
+
+    .premium-button, .ghost-button {
+      width: 100%;
+      min-height: 48px;
+      border-radius: 15px;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .premium-button {
+      border: 0;
+      color: #fff;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .18), transparent 38%),
+        linear-gradient(135deg, var(--teal), var(--mint));
+      box-shadow: 0 16px 36px rgba(5, 120, 102, .28), inset 0 1px 0 rgba(255, 255, 255, .34);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .premium-button::after {
+      content: "";
+      position: absolute;
+      inset: -40% auto -40% -70%;
+      width: 55%;
+      transform: skewX(-18deg);
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .38), transparent);
+      animation: buttonSheen 4.2s ease-in-out infinite;
+    }
+
+    @keyframes buttonSheen {
+      0%, 38% { left: -70%; }
+      62%, 100% { left: 130%; }
+    }
+
+    .ghost-button {
+      border: 1px solid rgba(17, 24, 28, .1);
+      color: var(--ink);
+      background: rgba(255, 255, 255, .74);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .88);
+    }
+
+    .split-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .progress {
+      height: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(17, 24, 28, .09);
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--mint), var(--blue));
+      box-shadow: 0 0 22px rgba(33, 198, 155, .45);
+      animation: progressGlow 2.8s ease-in-out infinite;
+      transform-origin: left center;
+    }
+
+    @keyframes progressGlow {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.15); }
+    }
+
+    .version-box {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 13px;
+      padding: 15px;
+      border-radius: 18px;
+      color: #fff;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .15), transparent 36%),
+        linear-gradient(135deg, #14252c, #0d665b 66%, #1ec397);
+      box-shadow: var(--shadow);
+    }
+
+    .update-steps {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .update-step {
+      display: grid;
+      grid-template-columns: 24px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 38px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .step-dot {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(17, 24, 28, .08);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .update-step.done,
+    .update-step.active {
+      color: var(--ink);
+    }
+
+    .update-step.done .step-dot,
+    .update-step.active .step-dot {
+      color: #fff;
+      background: linear-gradient(135deg, var(--teal), var(--mint));
+    }
+
+    body.luxury .update-step.done .step-dot,
+    body.luxury .update-step.active .step-dot {
+      color: #17130b;
+      background: linear-gradient(135deg, #fff0bd, #c99734);
+    }
+
+    .round-icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .16);
+      color: #fff;
+    }
+
+    .version-box small {
+      color: rgba(255, 255, 255, .72);
+      font-size: 12px;
+    }
+
+    .version-box strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 18px;
+    }
+
+    .control-pad {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      max-width: 292px;
+      margin: 0 auto;
+      padding: 18px;
+      border: 1px solid var(--hairline);
+      border-radius: 32px;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(33, 198, 155, .08), transparent 46%),
+        var(--control-surface);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .64), 0 26px 70px rgba(16, 33, 39, .12);
+      backdrop-filter: blur(18px);
+    }
+
+    .control-pad button {
+      aspect-ratio: 1;
+      border: 1px solid var(--hairline);
+      border-radius: 24px;
+      color: var(--ink);
+      background: var(--control-button);
+      box-shadow: 0 16px 34px rgba(16, 33, 39, .12), inset 0 1px 0 rgba(255, 255, 255, .88);
+      font-size: 22px;
+      font-weight: 900;
+      transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+    }
+
+    .control-pad button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 22px 42px rgba(16, 33, 39, .16), inset 0 1px 0 rgba(255, 255, 255, .9);
+    }
+
+    .control-pad button:active {
+      transform: scale(.96);
+      filter: brightness(.98);
+    }
+
+    .control-pad .stop {
+      color: #fff;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .18), transparent 38%),
+        linear-gradient(135deg, #a92d34, var(--red));
+      box-shadow: 0 18px 38px rgba(201, 68, 68, .28), inset 0 1px 0 rgba(255, 255, 255, .22);
+      animation: stopReady 2.6s ease-in-out infinite;
+    }
+
+    .map-panel {
+      position: relative;
+      height: 210px;
+      overflow: hidden;
+      border: 1px solid var(--hairline);
+      border-radius: 18px;
+      background:
+        linear-gradient(90deg, rgba(17, 24, 28, .05) 1px, transparent 1px),
+        linear-gradient(rgba(17, 24, 28, .05) 1px, transparent 1px),
+        rgba(255, 255, 255, .58);
+      background-size: 32px 32px;
+    }
+
+    body.luxury .map-panel {
+      background:
+        linear-gradient(90deg, rgba(223, 181, 92, .08) 1px, transparent 1px),
+        linear-gradient(rgba(223, 181, 92, .08) 1px, transparent 1px),
+        rgba(255, 255, 255, .035);
+    }
+
+    .route {
+      position: absolute;
+      inset: 18px;
+      width: calc(100% - 36px);
+      height: calc(100% - 36px);
+    }
+
+    .route path {
+      fill: none;
+      stroke: var(--mint);
+      stroke-width: 6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 10 12;
+      animation: routeMove 2.4s linear infinite;
+    }
+
+    @keyframes routeMove {
+      to { stroke-dashoffset: -44; }
+    }
+
+    .map-robot {
+      position: absolute;
+      left: 45%;
+      top: 43%;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 8px rgba(33, 198, 155, .15);
+      animation: mapRobot 5s ease-in-out infinite;
+    }
+
+    @keyframes mapRobot {
+      0%, 100% { transform: translate(0, 0); }
+      30% { transform: translate(48px, -22px); }
+      65% { transform: translate(-38px, 34px); }
+    }
+
+    .obstacle {
+      position: absolute;
+      width: 34px;
+      height: 24px;
+      border-radius: 8px;
+      background: rgba(217, 155, 53, .32);
+      border: 1px solid rgba(217, 155, 53, .4);
+    }
+
+    .obstacle.one { left: 24px; top: 34px; }
+    .obstacle.two { right: 36px; bottom: 38px; }
+
+    .map-panel.running .map-robot {
+      animation-play-state: running;
+    }
+
+    .map-panel.paused .map-robot,
+    .map-panel.paused .route path {
+      animation-play-state: paused;
+    }
+
+    .map-meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .map-stat {
+      min-height: 54px;
+      padding: 10px;
+      border: 1px solid var(--hairline);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .5);
+    }
+
+    body.luxury .map-stat {
+      background: rgba(255, 255, 255, .045);
+      border-color: rgba(223, 181, 92, .16);
+    }
+
+    .map-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .map-stat strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 15px;
+    }
+
+    .room-selector {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+
+    .room-selector button {
+      min-height: 38px;
+      border: 1px solid var(--hairline);
+      border-radius: 13px;
+      color: var(--soft-ink);
+      background: rgba(255, 255, 255, .58);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .room-selector button.active {
+      color: #fff;
+      background: linear-gradient(135deg, var(--teal), var(--mint));
+    }
+
+    body.luxury .room-selector button {
+      color: #d8c68f;
+      background: rgba(255, 255, 255, .045);
+      border-color: rgba(223, 181, 92, .16);
+    }
+
+    body.luxury .room-selector button.active {
+      color: #17130b;
+      background: linear-gradient(135deg, #fff0bd, #c99734);
+    }
+
+    .map-actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .map-actions button {
+      min-height: 42px;
+      border-radius: 14px;
+      font-size: 12px;
+    }
+
+    .map-scan {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(90deg, transparent, rgba(33, 198, 155, .16), transparent);
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+
+    .map-panel.running .map-scan {
+      opacity: 1;
+      animation: scanMap 2.1s ease-in-out infinite;
+    }
+
+    @keyframes scanMap {
+      to { transform: translateX(100%); }
+    }
+
+    .profile-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .profile-item {
+      min-height: 76px;
+      padding: 12px;
+      border: 1px solid var(--hairline);
+      border-radius: 15px;
+      background: rgba(255, 255, 255, .58);
+    }
+
+    body.luxury .profile-item {
+      background: rgba(255, 255, 255, .045);
+    }
+
+    .profile-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .profile-item strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 15px;
+    }
+
+    .schedule-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .schedule-chip {
+      min-height: 44px;
+      border: 1px solid var(--hairline);
+      border-radius: 15px;
+      color: var(--soft-ink);
+      background: rgba(255, 255, 255, .62);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .schedule-chip.active {
+      color: #fff;
+      background: linear-gradient(135deg, var(--teal), var(--mint));
+    }
+
+    body.luxury .schedule-chip {
+      color: #d8c68f;
+      background: rgba(255, 255, 255, .045);
+      border-color: rgba(223, 181, 92, .16);
+    }
+
+    body.luxury .schedule-chip.active {
+      color: #17130b;
+      background: linear-gradient(135deg, #fff0bd, #c99734);
+    }
+
+    .global-stop {
+      position: fixed;
+      right: max(14px, calc(50% - 226px));
+      bottom: 94px;
+      z-index: 18;
+      width: 62px;
+      height: 62px;
+      border: 0;
+      border-radius: 50%;
+      color: #fff;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .18), transparent 42%),
+        linear-gradient(135deg, #9f2028, var(--red));
+      box-shadow: 0 22px 44px rgba(201, 68, 68, .34), inset 0 1px 0 rgba(255, 255, 255, .24);
+      font-size: 13px;
+      font-weight: 1000;
+      letter-spacing: .5px;
+      animation: stopReady 2.6s ease-in-out infinite;
+    }
+
+    @keyframes stopReady {
+      0%, 100% { box-shadow: 0 18px 38px rgba(201, 68, 68, .28), inset 0 1px 0 rgba(255, 255, 255, .22); }
+      50% { box-shadow: 0 20px 46px rgba(201, 68, 68, .42), inset 0 1px 0 rgba(255, 255, 255, .26); }
+    }
+
+    body.luxury .control-pad {
+      background:
+        radial-gradient(circle at 50% 50%, rgba(223, 181, 92, .13), transparent 47%),
+        linear-gradient(145deg, rgba(35, 31, 21, .78), rgba(7, 7, 5, .72));
+      box-shadow: inset 0 1px 0 rgba(255, 229, 162, .14), 0 30px 80px rgba(0, 0, 0, .44);
+    }
+
+    body.luxury .control-pad button {
+      color: #f7f1df;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 229, 162, .16);
+    }
+
+    .manual-status {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+      padding: 12px;
+      border: 1px solid var(--hairline);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .58);
+    }
+
+    body.luxury .manual-status {
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .manual-status strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .manual-status small {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .speed-pill {
+      min-width: 74px;
+      min-height: 34px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 999px;
+      color: var(--teal);
+      background: rgba(33, 198, 155, .12);
+      font-size: 12px;
+      font-weight: 900;
+      animation: speedPulse 3.2s ease-in-out infinite;
+    }
+
+    @keyframes speedPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.035); }
+    }
+
+    .theme-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .theme-choice {
+      min-height: 76px;
+      display: grid;
+      align-content: center;
+      gap: 7px;
+      border: 1px solid var(--hairline);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .68);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .theme-choice.active {
+      outline: 2px solid var(--mint);
+      outline-offset: 2px;
+    }
+
+    .swatches {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, .8);
+      box-shadow: 0 4px 10px rgba(17, 24, 28, .16);
+    }
+
+    .swatch.light-a { background: #ffffff; }
+    .swatch.light-b { background: #21c69b; }
+    .swatch.dark-a { background: #080806; }
+    .swatch.dark-b { background: #dfb55c; }
+
+    .empty { visibility: hidden; }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      padding: 5px;
+      border: 1px solid var(--hairline);
+      border-radius: 18px;
+      background: rgba(17, 24, 28, .06);
+    }
+
+    .segmented button {
+      min-height: 42px;
+      border: 0;
+      border-radius: 14px;
+      color: var(--soft-ink);
+      background: transparent;
+      font-size: 12px;
+      font-weight: 850;
+      transition: color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
+    }
+
+    .segmented button:hover {
+      transform: translateY(-1px);
+    }
+
+    .segmented button.active {
+      color: #fff;
+      background: linear-gradient(135deg, var(--teal), var(--mint));
+      box-shadow: 0 10px 22px rgba(5, 120, 102, .2), inset 0 1px 0 rgba(255, 255, 255, .25);
+      transform: translateY(-1px);
+    }
+
+    body.luxury .segmented {
+      background: rgba(255, 255, 255, .04);
+      border-color: rgba(223, 181, 92, .18);
+    }
+
+    body.luxury .segmented button {
+      color: #cdbb88;
+    }
+
+    body.luxury .segmented button.active {
+      color: #17130b;
+      background: linear-gradient(135deg, #fff1bf, #c89633);
+      box-shadow: 0 14px 28px rgba(223, 181, 92, .2), inset 0 1px 0 rgba(255, 255, 255, .38);
+    }
+
+    .slider-row {
+      display: grid;
+      gap: 7px;
+      margin-top: 13px;
+    }
+
+    .slider-row label {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--soft-ink);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--mint);
+    }
+
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 13px 0;
+      border-bottom: 1px solid rgba(17, 24, 28, .08);
+    }
+
+    .toggle-row:last-child { border-bottom: 0; }
+
+    .toggle-row strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .toggle-row small {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .switch {
+      position: relative;
+      width: 48px;
+      height: 29px;
+      flex: 0 0 auto;
+    }
+
+    .switch input { display: none; }
+
+    .switch span {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: rgba(17, 24, 28, .16);
+      transition: .2s ease;
+    }
+
+    .switch span::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 23px;
+      height: 23px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(17, 24, 28, .22);
+      transition: .2s ease;
+    }
+
+    .switch input:checked + span { background: var(--mint); }
+    .switch input:checked + span::after { transform: translateX(19px); }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 92px;
+      z-index: 20;
+      width: min(430px, calc(100% - 28px));
+      transform: translate(-50%, 18px);
+      opacity: 0;
+      pointer-events: none;
+      padding: 13px 14px;
+      border: 1px solid var(--hairline);
+      border-radius: 16px;
+      color: var(--ink);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(20px);
+      transition: opacity .22s ease, transform .22s ease;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .onboarding {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: grid;
+      place-items: end center;
+      padding: 18px;
+      background: rgba(4, 8, 9, .42);
+      backdrop-filter: blur(14px);
+    }
+
+    .onboarding.hidden {
+      display: none;
+    }
+
+    .onboarding-card {
+      width: min(432px, 100%);
+      padding: 18px;
+      border: 1px solid rgba(255, 255, 255, .66);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, .9);
+      box-shadow: var(--shadow);
+    }
+
+    body.luxury .onboarding-card {
+      background: rgba(20, 18, 13, .94);
+      border-color: rgba(223, 181, 92, .22);
+    }
+
+    .onboarding-card h2 {
+      font-size: 25px;
+      line-height: 1;
+    }
+
+    .onboarding-card p {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .onboarding-list {
+      display: grid;
+      gap: 9px;
+      margin: 16px 0;
+    }
+
+    .onboarding-list div {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 9px;
+      align-items: center;
+      color: var(--soft-ink);
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .onboarding-list span {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: #fff;
+      background: linear-gradient(135deg, var(--teal), var(--mint));
+      font-size: 12px;
+    }
+
+    .select-row {
+      display: grid;
+      gap: 7px;
+      margin-top: 12px;
+    }
+
+    .select-row label {
+      color: var(--soft-ink);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    select, .text-field {
+      width: 100%;
+      min-height: 46px;
+      border: 1px solid rgba(17, 24, 28, .11);
+      border-radius: 15px;
+      padding: 0 13px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, .78);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .85);
+    }
+
+    .status-ok { color: var(--teal); font-weight: 900; }
+    .status-warn { color: var(--gold); font-weight: 900; }
+
+    nav {
+      position: fixed;
+      left: 50%;
+      bottom: 0;
+      z-index: 10;
+      width: min(480px, 100%);
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 9px 10px 11px;
+      background: rgba(250, 253, 252, .82);
+      border-top: 1px solid rgba(255, 255, 255, .78);
+      backdrop-filter: blur(24px);
+      box-shadow: 0 -16px 44px rgba(17, 24, 28, .1);
+    }
+
+    .nav-item {
+      min-height: 58px;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 4px;
+      border: 0;
+      border-radius: 17px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 11px;
+      font-weight: 850;
+      transition: transform .18s ease, color .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+
+    .nav-item:hover {
+      transform: translateY(-1px);
+    }
+
+    .nav-item.active {
+      color: var(--teal);
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(16, 33, 39, .1), inset 0 1px 0 rgba(255, 255, 255, .9);
+      transform: translateY(-2px);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    body.luxury .nav-item {
+      color: #9d8e65;
+    }
+
+    body.luxury .nav-item.active {
+      color: #17130b;
+      background: linear-gradient(135deg, #fff0bd, #c99734);
+      box-shadow: 0 16px 32px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 255, 255, .38);
+    }
+
+    body.luxury .premium-button {
+      color: #17130b;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, .22), transparent 38%),
+        linear-gradient(135deg, #fff0bd, #c99734);
+      box-shadow: 0 16px 36px rgba(223, 181, 92, .2), inset 0 1px 0 rgba(255, 255, 255, .34);
+    }
+
+    body.luxury .ghost-button {
+      color: #fff5d8;
+      background: rgba(255, 255, 255, .05);
+      border-color: rgba(223, 181, 92, .18);
+    }
+
+    @media (min-width: 760px) {
+      .shell { padding: 30px; }
+      .phone {
+        min-height: calc(100vh - 60px);
+        border-radius: 34px;
+        outline: 8px solid rgba(255, 255, 255, .46);
+      }
+      nav { border-radius: 0 0 34px 34px; }
+    }
+
+    @media (max-width: 370px) {
+      .hero h2 { font-size: 34px; }
+      .robot-art { opacity: .76; }
+      .action-grid { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
-<div class="app">
+  <div class="shell">
+    <div class="phone">
+      <header>
+        <div class="topbar">
+          <div class="brand">
+            <div class="mark">NK</div>
+            <div>
+              <h1>NOKA Clean</h1>
+              <div class="subtitle">Robot inteligente de limpieza</div>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button class="connect-button" id="connectButton" title="Conectar robot" aria-label="Conectar robot">
+              <svg viewBox="0 0 24 24"><path d="M6.5 6.5a7.8 7.8 0 0 1 11 0"/><path d="M8.8 8.8a4.5 4.5 0 0 1 6.4 0"/><path d="m12 12 4 4-4 4V4l4 4-4 4Z"/></svg>
+              Conectar
+            </button>
+            <button class="theme-toggle" title="Cambiar color" aria-label="Cambiar color">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg>
+            </button>
+            <div class="status-pill"><span class="dot"></span> <span id="topStatus">Demo</span></div>
+          </div>
+        </div>
+      </header>
 
-  <div class="conn">
-    <span id="dot" class="dot"></span>
-    <div class="conn-field">
-      <div class="name" id="connName">sin conectar</div>
-      <div class="status" id="connStatus">toca "conectar" y elige NOKA_Mini</div>
+      <main>
+        <section id="robot" class="screen active">
+          <div class="hero">
+            <div class="eyebrow">Mi robot</div>
+            <h2>NOKA-0001</h2>
+            <p>Control, estado, cuidado y futuras mejoras desde una experiencia simple para el comprador.</p>
+            <svg class="robot-art" viewBox="0 0 240 190" role="img" aria-label="Robot NOKA Clean">
+              <defs>
+                <linearGradient id="body" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0" stop-color="#ffffff"/>
+                  <stop offset=".55" stop-color="#eef4f3"/>
+                  <stop offset="1" stop-color="#cddadd"/>
+                </linearGradient>
+                <linearGradient id="rim" x1="0" x2="1">
+                  <stop offset="0" stop-color="var(--robot-accent-a)"/>
+                  <stop offset="1" stop-color="var(--robot-accent-b)"/>
+                </linearGradient>
+                <linearGradient id="visor" x1="0" x2="1">
+                  <stop offset="0" stop-color="#10191d"/>
+                  <stop offset="1" stop-color="#26383f"/>
+                </linearGradient>
+                <linearGradient id="metal" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0" stop-color="#f7fbfa"/>
+                  <stop offset="1" stop-color="#aebdc1"/>
+                </linearGradient>
+              </defs>
+              <ellipse cx="120" cy="160" rx="88" ry="18" fill="rgba(17,24,28,.2)"/>
+              <path d="M42 91c0-38 30-68 78-68s78 30 78 68v22c0 38-31 61-78 61s-78-23-78-61V91z" fill="url(#body)" stroke="#aebdc1" stroke-width="3"/>
+              <path d="M55 92c7-30 31-50 65-50s58 20 65 50" fill="none" stroke="url(#rim)" stroke-width="9" stroke-linecap="round"/>
+              <path d="M65 90c11-21 30-33 55-33s44 12 55 33" fill="none" stroke="#ffffff" stroke-opacity=".72" stroke-width="3" stroke-linecap="round"/>
+              <path d="M72 87h96c9 0 16 7 16 16v15c0 9-7 16-16 16H72c-9 0-16-7-16-16v-15c0-9 7-16 16-16z" fill="url(#visor)"/>
+              <circle cx="92" cy="110" r="8" fill="var(--robot-eye)"/>
+              <circle cx="148" cy="110" r="8" fill="var(--robot-eye)"/>
+              <circle cx="92" cy="110" r="3" fill="var(--robot-eye-glow)"/>
+              <circle cx="148" cy="110" r="3" fill="var(--robot-eye-glow)"/>
+              <path d="M98 143h44" stroke="url(#rim)" stroke-width="5" stroke-linecap="round"/>
+              <path d="M75 151c13 8 28 12 45 12s32-4 45-12" fill="none" stroke="#b8c7ca" stroke-width="3" stroke-linecap="round"/>
+              <rect x="30" y="104" width="23" height="42" rx="9" fill="#233238"/>
+              <rect x="187" y="104" width="23" height="42" rx="9" fill="#233238"/>
+              <path d="M43 124h-8M197 124h8" stroke="var(--robot-eye)" stroke-width="4" stroke-linecap="round"/>
+              <rect x="91" y="10" width="58" height="24" rx="12" fill="url(#metal)" stroke="#aebdc1"/>
+              <rect x="104" y="15" width="32" height="14" rx="7" fill="url(#rim)"/>
+              <circle cx="120" cy="22" r="4" fill="#fff"/>
+              <path d="M62 74c13-23 34-36 58-36s45 13 58 36" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="1.5"/>
+            </svg>
+          </div>
+
+          <div class="stack">
+            <section class="summary">
+              <div class="metric"><span>Version</span><strong>v0.1.0</strong></div>
+              <div class="metric"><span>Modo</span><strong>Auto</strong></div>
+              <div class="metric"><span>Conexion</span><strong id="connectionValue">BLE listo</strong></div>
+              <div class="metric"><span>Estado</span><strong id="stateValue">En espera</strong></div>
+            </section>
+
+            <section class="card section">
+              <div class="section-head"><h3>Accesos rapidos</h3><span class="tag">Demo visual</span></div>
+              <div class="action-grid">
+                <button class="tile" data-go="clean"><span class="tile-icon"><svg viewBox="0 0 24 24"><path d="M4 13h16"/><path d="M6 17h12"/><path d="M8 21h8"/><path d="M12 3v10"/></svg></span><span><strong>Iniciar limpieza</strong><span>Modo automatico preparado.</span></span></button>
+                <button class="tile" data-go="update" id="quickUpdate"><span class="tile-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg></span><span><strong>Buscar mejoras</strong><span>Novedades listas para tu robot.</span></span></button>
+                <button class="tile" data-go="settings"><span class="tile-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3"/></svg></span><span><strong>Configurar</strong><span>Nombre, WiFi y preferencias.</span></span></button>
+                <button class="tile"><span class="tile-icon"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg></span><span><strong>Soporte</strong><span>Ayuda y diagnostico.</span></span></button>
+              </div>
+            </section>
+
+            <section class="glass section">
+              <div class="section-head"><h3>Diagnostico rapido</h3><span class="tag">Salud</span></div>
+              <div class="list">
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M7 10h10v7H7z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/></svg></span><div><strong>Motores y driver</strong><small>Ultima prueba correcta</small></div><span class="status-ok">OK</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M6.5 6.5a7.8 7.8 0 0 1 11 0"/><path d="m12 12 4 4-4 4V4l4 4-4 4Z"/></svg></span><div><strong>Bluetooth</strong><small id="bleDetail">Preparado para conectar</small></div><span class="status-ok" id="bleStatus">OK</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M3 11h18"/><path d="M7 7h10"/><path d="M7 15h10"/></svg></span><div><strong>Sensor frontal</strong><small>Proteccion de obstaculos</small></div><span class="status-ok">OK</span></div>
+              </div>
+            </section>
+
+            <section class="card section">
+              <div class="section-head"><h3>Ultimas limpiezas</h3><span class="tag">Historial</span></div>
+              <div class="list">
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M12 4v16"/></svg></span><div><strong>Hoy</strong><small>Sala principal, 12 min</small></div><span class="status-ok">OK</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M8 7h10"/><path d="M6 12h12"/><path d="M8 17h8"/></svg></span><div><strong>Ayer</strong><small>Habitacion, 18 min</small></div><span class="status-ok">OK</span></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="update" class="screen">
+          <div class="stack">
+            <section class="version-box">
+              <div class="round-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg></div>
+              <div><small>Tu robot esta listo</small><strong>NOKA Clean v0.1.0</strong></div>
+            </section>
+            <section class="card section">
+              <div class="section-head"><h3>Mejoras</h3><span class="tag">Para tu robot</span></div>
+              <div class="list">
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div><strong>Estado del software</strong><small id="updateStatusText">Tu robot esta al dia</small></div><span class="status-ok" id="updateBadge">Actual</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M2 12h20"/></svg></span><div><strong>Canal de mejoras</strong><small>Estable recomendado</small></div><span class="chev">›</span></div>
+                <div class="list-row" id="scanUpdateRow"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></span><div><strong>Buscar novedades</strong><small>Revisa si hay algo nuevo</small></div><span class="chev">›</span></div>
+              </div>
+              <div class="update-steps">
+                <div class="update-step done" data-step="0"><span class="step-dot">1</span><span>Buscar mejoras</span><small>OK</small></div>
+                <div class="update-step" data-step="1"><span class="step-dot">2</span><span>Preparar cambios</span><small>Listo</small></div>
+                <div class="update-step" data-step="2"><span class="step-dot">3</span><span>Revisar el robot</span><small>Listo</small></div>
+                <div class="update-step" data-step="3"><span class="step-dot">4</span><span>Finalizar</span><small>Listo</small></div>
+              </div>
+              <div style="margin-top:14px" class="progress"><span id="updateProgress" style="width:100%"></span></div>
+              <div class="split-actions"><button class="premium-button" id="startUpdateButton">Actualizar</button><button class="ghost-button" id="historyButton">Historial</button></div>
+            </section>
+            <section class="glass section">
+              <div class="section-head"><h3>Cuidado del robot</h3><span class="tag">Recomendado</span></div>
+              <div class="list">
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span><div><strong>Revision mensual</strong><small>Limpia ruedas y sensores</small></div><span class="status-warn">Tip</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></span><div><strong>Uso seguro</strong><small>Evita escaleras y cables sueltos</small></div><span class="status-warn">Tip</span></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="clean" class="screen">
+          <div class="stack">
+            <section class="card section">
+              <div class="section-head"><h3>Limpieza</h3><span class="tag">Listo</span></div>
+              <div class="segmented" id="modeTabs"><button class="active" data-mode="autonomo">Auto</button><button data-mode="vision">Vision</button><button data-mode="manual">Manual</button></div>
+              <div class="slider-row"><label><span>Potencia</span><span>Normal</span></label><input type="range" min="1" max="3" value="2"></div>
+              <div class="slider-row"><label><span>Sensibilidad</span><span>Alta</span></label><input type="range" min="1" max="5" value="4"></div>
+              <div class="split-actions"><button class="premium-button" id="startCleanButton">Iniciar</button><button class="ghost-button" id="pauseCleanButton">Pausar</button></div>
+            </section>
+            <section class="glass section">
+              <div class="section-head"><h3>Control manual</h3><span class="tag">Disponible</span></div>
+              <div class="manual-status">
+                <div><strong>Mando premium</strong><small>Preparado para avanzar, girar y frenar con baja latencia.</small></div>
+                <span class="speed-pill">200 PWM</span>
+              </div>
+              <div class="control-pad">
+                <span class="empty"></span><button data-command="avanza" aria-label="Avanzar" title="Avanzar">↑</button><span class="empty"></span>
+                <button data-command="izquierda" aria-label="Izquierda" title="Izquierda">←</button><button data-command="detente" class="stop" aria-label="Detener" title="Detener">■</button><button data-command="derecha" aria-label="Derecha" title="Derecha">→</button>
+                <span class="empty"></span><button data-command="retrocede" aria-label="Retroceder" title="Retroceder">↓</button><span class="empty"></span>
+              </div>
+            </section>
+            <section class="card section">
+              <div class="section-head"><h3>Mapa inteligente</h3><span class="tag" id="mapStatus">Listo</span></div>
+              <div class="room-selector" id="roomSelector">
+                <button class="active" data-room="Sala">Sala</button>
+                <button data-room="Cuarto">Cuarto</button>
+                <button data-room="Cocina">Cocina</button>
+                <button data-room="Oficina">Oficina</button>
+              </div>
+              <div class="map-panel paused" id="mapPanel">
+                <svg class="route" viewBox="0 0 320 170" aria-hidden="true"><path id="routePath" d="M18 132 C62 30 121 33 126 89 S238 155 295 44"/></svg>
+                <span class="obstacle one"></span>
+                <span class="obstacle two"></span>
+                <span class="map-robot" id="mapRobot"></span>
+                <span class="map-scan"></span>
+              </div>
+              <div class="map-meta">
+                <div class="map-stat"><span>Habitacion</span><strong id="mapRoom">Sala</strong></div>
+                <div class="map-stat"><span>Progreso</span><strong id="mapProgress">0%</strong></div>
+                <div class="map-stat"><span>Tiempo</span><strong id="mapTime">0:00</strong></div>
+              </div>
+              <div class="map-actions">
+                <button class="premium-button" id="mapStartButton">Iniciar</button>
+                <button class="ghost-button" id="mapPauseButton">Pausar</button>
+                <button class="ghost-button" id="mapResetButton">Reiniciar</button>
+              </div>
+            </section>
+            <section class="card section">
+              <div class="section-head"><h3>Escenas</h3><span class="tag">Opciones</span></div>
+              <div class="action-grid">
+                <button class="tile"><span class="tile-icon"><svg viewBox="0 0 24 24"><path d="M3 12h18"/><path d="M12 3v18"/></svg></span><span><strong>Habitacion</strong><span>Ruta corta y cuidadosa.</span></span></button>
+                <button class="tile"><span class="tile-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18v12H3z"/><path d="M8 6v12"/></svg></span><span><strong>Sala</strong><span>Mayor cobertura.</span></span></button>
+                <button class="tile"><span class="tile-icon"><svg viewBox="0 0 24 24"><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/><path d="M9 9h6"/></svg></span><span><strong>Bordes</strong><span>Paredes y esquinas.</span></span></button>
+                <button class="tile"><span class="tile-icon"><svg viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M5 7h14"/><path d="M5 17h14"/></svg></span><span><strong>Spot</strong><span>Zona puntual.</span></span></button>
+              </div>
+            </section>
+            <section class="glass section">
+              <div class="section-head"><h3>Programar limpieza</h3><span class="tag">Agenda</span></div>
+              <div class="schedule-grid">
+                <button class="schedule-chip active">Hoy</button>
+                <button class="schedule-chip">Manana</button>
+                <button class="schedule-chip">Todos los dias</button>
+                <button class="schedule-chip">Elegir hora</button>
+              </div>
+              <div class="split-actions"><button class="premium-button" id="scheduleButton">Guardar</button><button class="ghost-button">Cancelar</button></div>
+            </section>
+            <section class="card section">
+              <div class="section-head"><h3>Mi hogar</h3><span class="tag">Habitaciones</span></div>
+              <div class="list">
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18v12H3z"/><path d="M8 6v12"/></svg></span><div><strong>Sala</strong><small>Lista para limpiar</small></div><span class="chev">›</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M7 12V7h10v5"/></svg></span><div><strong>Habitacion</strong><small>Recomendada hoy</small></div><span class="chev">›</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M5 21V5h14v16"/><path d="M9 9h6"/></svg></span><div><strong>Cocina</strong><small>Evita zonas mojadas</small></div><span class="chev">›</span></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="settings" class="screen">
+          <div class="stack">
+            <section class="glass section">
+              <div class="section-head"><h3>Perfil del robot</h3><span class="tag">NOKA</span></div>
+              <div class="profile-grid">
+                <div class="profile-item"><span>Modelo</span><strong>NOKA Clean Mini</strong></div>
+                <div class="profile-item"><span>Serie</span><strong>NOKA-0001</strong></div>
+                <div class="profile-item"><span>Compra</span><strong>Demo 2026</strong></div>
+                <div class="profile-item"><span>Estado</span><strong>Listo</strong></div>
+              </div>
+            </section>
+            <section class="card section">
+              <div class="section-head"><h3>Ajustes</h3><span class="tag">Producto</span></div>
+              <div class="select-row"><label>Nombre del robot</label><input class="text-field" value="NOKA-0001"></div>
+              <div class="select-row"><label>Red WiFi</label><select><option>Casa principal</option><option>Agregar nueva red</option><option>Usar solo Bluetooth</option></select></div>
+              <div class="select-row"><label>Idioma</label><select><option>Español</option><option>English</option></select></div>
+            </section>
+            <section class="glass section">
+              <div class="section-head"><h3>Preferencias</h3><span class="tag">Cliente</span></div>
+              <div class="toggle-row"><div><strong>Freno seguro</strong><small>Detener si pierde conexion.</small></div><label class="switch"><input checked type="checkbox"><span></span></label></div>
+              <div class="toggle-row"><div><strong>Modo demo inversor</strong><small>Simula limpieza y estados.</small></div><label class="switch"><input id="demoSwitch" checked type="checkbox"><span></span></label></div>
+              <div class="toggle-row"><div><strong>Modo seguro</strong><small>Movimientos mas suaves para casa.</small></div><label class="switch"><input checked type="checkbox"><span></span></label></div>
+              <div class="toggle-row"><div><strong>Modo presentacion</strong><small>Recorre la app automaticamente.</small></div><label class="switch"><input id="presentationSwitch" type="checkbox"><span></span></label></div>
+              <div class="toggle-row"><div><strong>Notificaciones</strong><small>Avisos de limpieza y mejoras.</small></div><label class="switch"><input checked type="checkbox"><span></span></label></div>
+              <div class="toggle-row"><div><strong>Modo silencioso</strong><small>Menos avisos durante limpieza.</small></div><label class="switch"><input type="checkbox"><span></span></label></div>
+            </section>
+            <section class="card section">
+              <div class="section-head"><h3>Tutorial rapido</h3><span class="tag">Ayuda</span></div>
+              <div class="list">
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M5 10h14"/></svg></span><div><strong>Antes de limpiar</strong><small>Retira cables y objetos pequenos</small></div><span class="chev">›</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M4 14h16"/><path d="M6 18h12"/></svg></span><div><strong>Limpia las ruedas</strong><small>Hazlo despues de varias pruebas</small></div><span class="chev">›</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M3 11h18"/><path d="M7 7h10"/></svg></span><div><strong>Cuida el sensor</strong><small>No tapes la parte frontal</small></div><span class="chev">›</span></div>
+              </div>
+            </section>
+            <section class="card section">
+              <div class="section-head"><h3>Cuenta y soporte</h3><span class="tag">NOKA</span></div>
+              <div class="list">
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg></span><div><strong>Garantia</strong><small>Registrar comprador y robot</small></div><span class="chev">›</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg></span><div><strong>Soporte</strong><small>Diagnostico y ayuda</small></div><span class="chev">›</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></span><div><strong>Privacidad</strong><small>Camara, datos y seguridad</small></div><span class="chev">›</span></div>
+              </div>
+            </section>
+            <section class="glass section">
+              <div class="section-head"><h3>Registro de problemas</h3><span class="tag">Hoy</span></div>
+              <div class="list">
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div><strong>Sin bloqueos</strong><small>El robot responde normal</small></div><span class="status-ok">OK</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div><strong>Sensor frontal</strong><small>Sin alertas recientes</small></div><span class="status-ok">OK</span></div>
+              </div>
+            </section>
+            <section class="glass section">
+              <div class="section-head"><h3>Mantenimiento</h3><span class="tag">Cuidado</span></div>
+              <div class="list">
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M4 14h16"/><path d="M6 18h12"/><path d="M8 22h8"/></svg></span><div><strong>Ruedas</strong><small>Limpieza recomendada en 7 dias</small></div><span class="status-warn">Pronto</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M3 11h18"/><path d="M7 7h10"/><path d="M7 15h10"/></svg></span><div><strong>Sensor frontal</strong><small>Sin alerta</small></div><span class="status-ok">OK</span></div>
+                <div class="list-row"><span class="list-icon"><svg viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/><path d="M11 3h2M11 21h2"/></svg></span><div><strong>Motor</strong><small>Respuesta normal</small></div><span class="status-ok">OK</span></div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <button class="global-stop" id="globalStopButton" aria-label="Parada de emergencia">STOP</button>
+
+      <nav aria-label="Navegacion principal">
+        <button class="nav-item active" data-tab="robot" title="Mi robot"><svg viewBox="0 0 24 24"><path d="M7 10h10v7H7z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/><path d="M9 14h.01M15 14h.01"/></svg>Robot</button>
+        <button class="nav-item" data-tab="update" title="Actualizaciones"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>Update</button>
+        <button class="nav-item" data-tab="clean" title="Limpieza"><svg viewBox="0 0 24 24"><path d="M4 13h16"/><path d="M6 17h12"/><path d="M8 21h8"/><path d="M12 3v10"/></svg>Limpieza</button>
+        <button class="nav-item" data-tab="settings" title="Ajustes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Ajustes</button>
+      </nav>
     </div>
-    <button class="btn-connect" id="btnConnect">conectar</button>
-  </div>
-
-  <div class="mic-wrap">
-    <button class="mic-btn" id="micBtn" aria-label="Activar micrófono">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#82938a" stroke-width="1.6">
-        <rect x="9" y="2" width="6" height="12" rx="3"/>
-        <path d="M5 11a7 7 0 0 0 14 0"/>
-        <path d="M12 18v3"/>
-        <path d="M9 21h6"/>
-      </svg>
-    </button>
-    <div class="mic-label" id="micLabel">toca para hablar</div>
-  </div>
-
-  <div class="console" id="console">
-    <div>sistema listo. conecta el robot por bluetooth.</div>
-  </div>
-
-  <div>
-    <div class="section-title">movimiento</div>
-    <div class="dpad">
-      <button class="d-up" data-cmd="avanza"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16M5 11l7-7 7 7"/></svg></button>
-      <button class="d-left" data-cmd="izquierda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12H4M11 5l-7 7 7 7"/></svg></button>
-      <button class="d-stop" data-cmd="detente"><svg viewBox="0 0 24 24" fill="none" stroke="#e0594f" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
-      <button class="d-right" data-cmd="derecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M13 5l7 7-7 7"/></svg></button>
-      <button class="d-down" data-cmd="retrocede"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V4M19 13l-7 7-7-7"/></svg></button>
+    <div class="onboarding" id="onboarding">
+      <section class="onboarding-card">
+        <h2>Configura tu NOKA</h2>
+        <p>Una experiencia lista para comprador: encender, conectar, nombrar y limpiar sin tocar herramientas tecnicas.</p>
+        <div class="onboarding-list">
+          <div><span>1</span> Enciende el robot</div>
+          <div><span>2</span> Conecta por Bluetooth</div>
+          <div><span>3</span> Configura WiFi y actualizaciones</div>
+          <div><span>4</span> Inicia una limpieza segura</div>
+        </div>
+        <button class="premium-button" id="startOnboarding">Comenzar</button>
+      </section>
     </div>
   </div>
 
-  <div class="pala-row">
-    <button id="btnAuto" data-cmd="autonomo">🤖 modo autónomo</button>
-    <button id="btnManual" data-cmd="manual">🕹️ modo manual</button>
-  </div>
+  <script>
+    const screens = document.querySelectorAll(".screen");
+    const navItems = document.querySelectorAll(".nav-item");
+    const goButtons = document.querySelectorAll("[data-go]");
+    const themeToggle = document.querySelector(".theme-toggle");
+    const connectButton = document.querySelector("#connectButton");
+    const topStatus = document.querySelector("#topStatus");
+    const connectionValue = document.querySelector("#connectionValue");
+    const stateValue = document.querySelector("#stateValue");
+    const bleDetail = document.querySelector("#bleDetail");
+    const bleStatus = document.querySelector("#bleStatus");
+    const updateProgress = document.querySelector("#updateProgress");
+    const updateBadge = document.querySelector("#updateBadge");
+    const updateStatusText = document.querySelector("#updateStatusText");
+    const updateSteps = document.querySelectorAll(".update-step");
+    const startUpdateButton = document.querySelector("#startUpdateButton");
+    const scanUpdateRow = document.querySelector("#scanUpdateRow");
+    const startCleanButton = document.querySelector("#startCleanButton");
+    const pauseCleanButton = document.querySelector("#pauseCleanButton");
+    const demoSwitch = document.querySelector("#demoSwitch");
+    const commandButtons = document.querySelectorAll("[data-command]");
+    const modeButtons = document.querySelectorAll("#modeTabs button");
+    const scheduleChips = document.querySelectorAll(".schedule-chip");
+    const scheduleButton = document.querySelector("#scheduleButton");
+    const globalStopButton = document.querySelector("#globalStopButton");
+    const presentationSwitch = document.querySelector("#presentationSwitch");
+    const roomButtons = document.querySelectorAll("#roomSelector button");
+    const mapPanel = document.querySelector("#mapPanel");
+    const routePath = document.querySelector("#routePath");
+    const mapRobot = document.querySelector("#mapRobot");
+    const mapRoom = document.querySelector("#mapRoom");
+    const mapProgress = document.querySelector("#mapProgress");
+    const mapTime = document.querySelector("#mapTime");
+    const mapStatus = document.querySelector("#mapStatus");
+    const mapStartButton = document.querySelector("#mapStartButton");
+    const mapPauseButton = document.querySelector("#mapPauseButton");
+    const mapResetButton = document.querySelector("#mapResetButton");
+    const onboarding = document.querySelector("#onboarding");
+    const startOnboarding = document.querySelector("#startOnboarding");
 
-  <div class="cam-box">
-    <div class="conn-field" style="flex:1">
-      <label style="font-size:11px;color:var(--muted)">IP de la cámara (app IP Webcam)</label>
-      <input id="camIp" inputmode="decimal" placeholder="192.168.1.55:8080" style="width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:14px;outline:none;" />
-    </div>
-    <button class="btn-connect" id="btnCam">ver cámara</button>
-  </div>
-  <img id="camImg" style="display:none;width:100%;border-radius:12px;border:1px solid var(--line);" />
+    const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+    const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+    let rxCharacteristic = null;
+    let connectedDevice = null;
+    let demoTimer = null;
+    let presentationTimer = null;
+    let mapTimer = null;
+    let mapStartedAt = 0;
+    let mapElapsed = 0;
+    let currentRoom = "Sala";
 
-  <div class="hint">di "avanza", "retrocede", "izquierda", "derecha", "detente", "modo autónomo" o "modo manual"</div>
-</div>
+    const roomRoutes = {
+      Sala: "M18 132 C62 30 121 33 126 89 S238 155 295 44",
+      Cuarto: "M24 38 H285 V132 H48 V78 H238",
+      Cocina: "M32 138 C72 118 61 58 118 55 C176 52 144 130 210 125 C246 123 258 86 292 58",
+      Oficina: "M30 124 C74 36 126 150 170 64 S247 60 292 126"
+    };
 
-<script>
-  const $ = (sel) => document.querySelector(sel);
-  const dot         = $('#dot');
-  const connName    = $('#connName');
-  const connStatus  = $('#connStatus');
-  const btnConnect  = $('#btnConnect');
-  const micBtn      = $('#micBtn');
-  const micLabel    = $('#micLabel');
-  const consoleEl   = $('#console');
-
-  const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-  const RX_UUID       = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
-  const TX_UUID       = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
-
-  let bleDevice = null;
-  let rxCharacteristic = null;
-
-  function log(msg, isErr){
-    const line = document.createElement('div');
-    line.textContent = msg;
-    if(isErr) line.classList.add('err');
-    consoleEl.appendChild(line);
-    consoleEl.scrollTop = consoleEl.scrollHeight;
-    while(consoleEl.children.length > 40) consoleEl.removeChild(consoleEl.firstChild);
-  }
-
-  async function conectar(){
-    if(!navigator.bluetooth){
-      log('este navegador no soporta Web Bluetooth (usa Chrome en Android)', true);
-      return;
+    function showTab(tab) {
+      screens.forEach((screen) => screen.classList.toggle("active", screen.id === tab));
+      navItems.forEach((item) => item.classList.toggle("active", item.dataset.tab === tab));
+      document.querySelector("main").scrollTo({ top: 0, behavior: "smooth" });
     }
-    try{
-      bleDevice = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID]
+
+    function haptic(ms = 18) {
+      if ("vibrate" in navigator) navigator.vibrate(ms);
+    }
+
+    function toast(message) {
+      let node = document.querySelector(".toast");
+      if (!node) {
+        node = document.createElement("div");
+        node.className = "toast";
+        document.body.appendChild(node);
+      }
+      node.textContent = message;
+      node.classList.add("show");
+      clearTimeout(node.hideTimer);
+      node.hideTimer = setTimeout(() => node.classList.remove("show"), 2300);
+    }
+
+    function setState(label, bodyClass = "") {
+      stateValue.textContent = label;
+      document.body.classList.remove("cleaning", "updating", "alert");
+      if (bodyClass) document.body.classList.add(bodyClass);
+    }
+
+    function formatTime(totalSeconds) {
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      return `${minutes}:${seconds}`;
+    }
+
+    function setMapProgress(value) {
+      const progress = Math.max(0, Math.min(100, value));
+      const point = routePath.getPointAtLength(routePath.getTotalLength() * (progress / 100));
+      mapRobot.style.left = `calc(${(point.x / 320) * 100}% - 9px)`;
+      mapRobot.style.top = `calc(${(point.y / 170) * 100}% - 9px)`;
+      mapProgress.textContent = `${Math.round(progress)}%`;
+    }
+
+    function startMap() {
+      haptic(18);
+      mapPanel.classList.add("running");
+      mapPanel.classList.remove("paused");
+      mapStatus.textContent = "Limpiando";
+      setState("Limpiando", "cleaning");
+      mapStartedAt = Date.now() - mapElapsed;
+      clearInterval(mapTimer);
+      mapTimer = setInterval(() => {
+        mapElapsed = Date.now() - mapStartedAt;
+        const seconds = Math.floor(mapElapsed / 1000);
+        const progress = Math.min(100, (mapElapsed / 28000) * 100);
+        setMapProgress(progress);
+        mapTime.textContent = formatTime(seconds);
+        if (progress >= 100) {
+          pauseMap("Completado");
+          toast(`${currentRoom} limpia`);
+        }
+      }, 120);
+    }
+
+    function pauseMap(label = "Pausado") {
+      clearInterval(mapTimer);
+      mapPanel.classList.add("paused");
+      mapPanel.classList.remove("running");
+      mapStatus.textContent = label;
+      if (label === "Pausado") setState("Pausado");
+    }
+
+    function resetMap() {
+      haptic(18);
+      mapElapsed = 0;
+      pauseMap("Listo");
+      setMapProgress(0);
+      mapTime.textContent = "0:00";
+      setState("En espera");
+    }
+
+    function selectRoom(room) {
+      currentRoom = room;
+      routePath.setAttribute("d", roomRoutes[room]);
+      mapRoom.textContent = room;
+      roomButtons.forEach((button) => button.classList.toggle("active", button.dataset.room === room));
+      resetMap();
+      toast(`${room} seleccionada`);
+    }
+
+    function setConnected(isConnected) {
+      connectionValue.textContent = isConnected ? "Conectado" : "BLE listo";
+      topStatus.textContent = isConnected ? "Conectado" : "Demo";
+      connectButton.lastChild.textContent = isConnected ? " Listo" : " Conectar";
+      bleDetail.textContent = isConnected ? "NOKA_Mini enlazado" : "Preparado para conectar";
+      bleStatus.textContent = isConnected ? "ON" : "OK";
+    }
+
+    async function sendCommand(command) {
+      haptic(command === "detente" ? 45 : 18);
+      if (command === "detente") setState("Detenido", "alert");
+      else setState(command, "cleaning");
+
+      if (!rxCharacteristic) {
+        toast(`Demo: ${command}`);
+        return;
+      }
+
+      const data = new TextEncoder().encode(command);
+      await rxCharacteristic.writeValue(data);
+      toast(`Enviado: ${command}`);
+    }
+
+    async function pauseRobot() {
+      haptic(55);
+      setState("Pausado", "alert");
+      pauseMap("Pausado");
+
+      if (!rxCharacteristic) {
+        toast("Demo: robot pausado");
+        return;
+      }
+
+      const encoder = new TextEncoder();
+      await rxCharacteristic.writeValue(encoder.encode("manual"));
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      await rxCharacteristic.writeValue(encoder.encode("detente"));
+      toast("Robot pausado");
+    }
+
+    async function connectRobot() {
+      haptic(25);
+      if (!navigator.bluetooth) {
+        toast("Este navegador no tiene Web Bluetooth. Usa Chrome en Android.");
+        return;
+      }
+
+      try {
+        setState("Conectando");
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [SERVICE_UUID]
+        });
+        connectedDevice = device;
+        connectedDevice.addEventListener("gattserverdisconnected", () => {
+          rxCharacteristic = null;
+          setConnected(false);
+          setState("Desconectado");
+          toast("Robot desconectado");
+        });
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        rxCharacteristic = await service.getCharacteristic(RX_UUID);
+        setConnected(true);
+        setState("En espera");
+        toast("NOKA conectado por Bluetooth");
+      } catch (error) {
+        setConnected(false);
+        setState("En espera");
+        toast("No se pudo conectar todavia");
+      }
+    }
+
+    function runUpdateDemo() {
+      haptic(25);
+      showTab("update");
+      document.body.classList.add("updating");
+      updateBadge.textContent = "Demo";
+      updateStatusText.textContent = "Preparando actualizacion segura";
+      updateProgress.style.width = "0%";
+      updateSteps.forEach((step) => step.classList.remove("done", "active"));
+
+      const labels = [
+        "Buscando mejoras",
+        "Preparando cambios",
+        "Revisando el robot",
+        "Finalizando"
+      ];
+
+      labels.forEach((label, index) => {
+        setTimeout(() => {
+          updateSteps.forEach((step, stepIndex) => {
+            step.classList.toggle("done", stepIndex < index);
+            step.classList.toggle("active", stepIndex === index);
+          });
+          updateProgress.style.width = `${(index + 1) * 25}%`;
+          updateStatusText.textContent = label;
+          toast(label);
+        }, index * 1050);
       });
 
-      connName.textContent = bleDevice.name || 'dispositivo BLE';
-      bleDevice.addEventListener('gattserverdisconnected', onDesconectado);
-
-      const server = await bleDevice.gatt.connect();
-      const service = await server.getPrimaryService(SERVICE_UUID);
-      rxCharacteristic = await service.getCharacteristic(RX_UUID);
-
-      const txCharacteristic = await service.getCharacteristic(TX_UUID);
-      await txCharacteristic.startNotifications();
-      txCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
-        const texto = new TextDecoder().decode(e.target.value);
-        log('> ' + texto);
-      });
-
-      dot.classList.add('on');
-      connStatus.textContent = 'conectado';
-      btnConnect.classList.add('linked');
-      btnConnect.textContent = 'conectado';
-      log('conectado a ' + bleDevice.name);
-    }catch(e){
-      log('no se pudo conectar: ' + e.message, true);
+      setTimeout(() => {
+        updateSteps.forEach((step) => {
+          step.classList.add("done");
+          step.classList.remove("active");
+        });
+        updateBadge.textContent = "Actual";
+        updateStatusText.textContent = "Tu robot esta al dia";
+        setState("En espera");
+        document.body.classList.remove("updating");
+        toast("Robot actualizado");
+      }, 4700);
     }
-  }
 
-  function onDesconectado(){
-    dot.classList.remove('on');
-    connStatus.textContent = 'desconectado';
-    btnConnect.classList.remove('linked');
-    btnConnect.textContent = 'conectar';
-    rxCharacteristic = null;
-    log('conexión perdida', true);
-  }
-
-  btnConnect.addEventListener('click', () => {
-    if(bleDevice && bleDevice.gatt.connected){
-      bleDevice.gatt.disconnect();
-      return;
+    function startDemoLoop() {
+      clearInterval(demoTimer);
+      demoTimer = setInterval(() => {
+        if (!demoSwitch.checked || rxCharacteristic) return;
+        const states = ["En espera", "Listo", "Ruta segura", "Preparado"];
+        stateValue.textContent = states[Math.floor(Math.random() * states.length)];
+      }, 2600);
     }
-    conectar();
-  });
 
-  async function enviar(comando){
-    if(!rxCharacteristic){
-      log('conecta el robot primero', true);
-      return;
+    function togglePresentation(enabled) {
+      clearInterval(presentationTimer);
+      if (!enabled) {
+        toast("Modo presentacion apagado");
+        return;
+      }
+      const tabs = ["robot", "clean", "update", "settings"];
+      let index = 0;
+      toast("Modo presentacion activo");
+      presentationTimer = setInterval(() => {
+        index = (index + 1) % tabs.length;
+        showTab(tabs[index]);
+        if (tabs[index] === "clean") startMap();
+        if (tabs[index] === "update") runUpdateDemo();
+      }, 5200);
     }
-    try{
-      const datos = new TextEncoder().encode(comando);
-      await rxCharacteristic.writeValue(datos);
-      log('enviado: ' + comando);
-    }catch(e){
-      log('error al enviar: ' + e.message, true);
-    }
-  }
 
-  document.querySelectorAll('[data-cmd]').forEach(b=>{
-    b.addEventListener('click', () => enviar(b.dataset.cmd));
-  });
-
-  const btnAuto = $('#btnAuto');
-  const btnManual = $('#btnManual');
-  btnAuto.addEventListener('click', () => {
-    btnAuto.classList.add('active');
-  });
-  btnManual.addEventListener('click', () => {
-    btnAuto.classList.remove('active');
-  });
-
-  // ---- cámara IP (celular montado en el robot, app tipo "IP Webcam") ----
-  const camIp = $('#camIp');
-  const btnCam = $('#btnCam');
-  const camImg = $('#camImg');
-  camIp.value = localStorage.getItem('noka_cam_ip') || '';
-
-  let camActiva = false;
-  btnCam.addEventListener('click', () => {
-    const ip = camIp.value.trim();
-    if(!ip){ log('escribe la IP:puerto de la cámara primero', true); return; }
-    localStorage.setItem('noka_cam_ip', ip);
-
-    camActiva = !camActiva;
-    if(camActiva){
-      camImg.src = `http://${ip}/video`;
-      camImg.style.display = 'block';
-      btnCam.textContent = 'ocultar cámara';
-      camImg.onerror = () => log('no se pudo cargar la cámara (revisa IP y que esté en la misma WiFi)', true);
-    } else {
-      camImg.src = '';
-      camImg.style.display = 'none';
-      btnCam.textContent = 'ver cámara';
-    }
-  });
-
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let recognizing = false;
-  let recognition = null;
-
-  if(SpeechRecognition){
-    recognition = new SpeechRecognition();
-    recognition.lang = 'es-CO';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      recognizing = true;
-      micBtn.classList.add('listening');
-      micLabel.textContent = 'escuchando...';
-    };
-    recognition.onend = () => {
-      recognizing = false;
-      micBtn.classList.remove('listening');
-      if(micLabel.textContent === 'escuchando...') micLabel.textContent = 'toca para hablar';
-    };
-    recognition.onerror = (e) => log('error de voz: ' + e.error, true);
-    recognition.onresult = (e) => {
-      const dicho = e.results[0][0].transcript.trim().toLowerCase();
-      micLabel.innerHTML = `<span class="mic-heard">"${dicho}"</span>`;
-      interpretar(dicho);
-    };
-
-    micBtn.addEventListener('click', () => {
-      if(recognizing){ recognition.stop(); return; }
-      try{ recognition.start(); } catch(e){ /* ya iniciando */ }
+    navItems.forEach((item) => item.addEventListener("click", () => showTab(item.dataset.tab)));
+    goButtons.forEach((button) => button.addEventListener("click", () => showTab(button.dataset.go)));
+    themeToggle.addEventListener("click", () => {
+      haptic(15);
+      document.body.classList.toggle("luxury");
     });
-  } else {
-    micLabel.textContent = 'reconocimiento de voz no disponible en este navegador';
-    micBtn.disabled = true;
-  }
-
-  function quitarAcentos(s){
-    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  }
-
-  function interpretar(fraseOriginal){
-    const f = quitarAcentos(fraseOriginal);
-    if(/avanza|adelante/.test(f)){ enviar('avanza'); return; }
-    if(/retrocede|reversa|atras/.test(f)){ enviar('retrocede'); return; }
-    if(/izquierda/.test(f)){ enviar('izquierda'); return; }
-    if(/derecha/.test(f)){ enviar('derecha'); return; }
-    if(/para|alto|detente|quieto|stop/.test(f)){ enviar('detente'); return; }
-    if(/autonomo|explora|solo/.test(f)){ enviar('autonomo'); btnAuto.classList.add('active'); return; }
-    if(/manual/.test(f)){ enviar('manual'); btnAuto.classList.remove('active'); return; }
-    log('comando no reconocido: "' + fraseOriginal + '"', true);
-  }
-</script>
+    connectButton.addEventListener("click", connectRobot);
+    commandButtons.forEach((button) => button.addEventListener("click", () => sendCommand(button.dataset.command)));
+    startUpdateButton.addEventListener("click", runUpdateDemo);
+    scanUpdateRow.addEventListener("click", runUpdateDemo);
+    document.querySelector("#quickUpdate").addEventListener("click", runUpdateDemo);
+    startCleanButton.addEventListener("click", () => {
+      startMap();
+      sendCommand("autonomo");
+    });
+    pauseCleanButton.addEventListener("click", pauseRobot);
+    globalStopButton.addEventListener("click", pauseRobot);
+    scheduleChips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        scheduleChips.forEach((item) => item.classList.toggle("active", item === chip));
+        haptic(12);
+      });
+    });
+    scheduleButton.addEventListener("click", () => toast("Limpieza programada"));
+    roomButtons.forEach((button) => button.addEventListener("click", () => selectRoom(button.dataset.room)));
+    mapStartButton.addEventListener("click", startMap);
+    mapPauseButton.addEventListener("click", () => pauseMap("Pausado"));
+    mapResetButton.addEventListener("click", resetMap);
+    presentationSwitch.addEventListener("change", () => togglePresentation(presentationSwitch.checked));
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        modeButtons.forEach((item) => item.classList.toggle("active", item === button));
+        if (button.dataset.mode === "manual") sendCommand("manual");
+        if (button.dataset.mode === "autonomo") toast("Modo automatico seleccionado");
+        if (button.dataset.mode === "vision") toast("Vision queda lista para conectar con camara");
+      });
+    });
+    startDemoLoop();
+    resetMap();
+    setConnected(false);
+    setState("En espera");
+    startOnboarding.addEventListener("click", () => {
+      haptic(20);
+      onboarding.classList.add("hidden");
+      toast("NOKA listo para demo");
+    });
+  </script>
 </body>
 </html>
